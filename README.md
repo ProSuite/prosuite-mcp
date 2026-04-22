@@ -1,10 +1,10 @@
 # prosuite-mcp
 
-MCP server that exposes [Dira ProSuite](https://www.dirageosystems.ch) quality verification to AI assistants (Claude, etc.).
+MCP server that exposes [Dira ProSuite](https://www.dirageosystems.ch/prosuite?lang=en) quality verification to AI assistants (Claude, etc.).
 
 ## Prerequisites
 
-A running [prosuite-qa-microservice](https://github.com/ProSuite/prosuite-microservice-definition) (gRPC) reachable from the host where this server runs.
+A running ProSuite Quality Verification Server reachable from the host where this server runs.
 
 ## Installation
 

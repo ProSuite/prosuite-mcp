@@ -1,0 +1,56 @@
+[project]
+name = "prosuite-mcp"
+version = "0.0.1"
+description = "MCP server for Dira ProSuite quality verification"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "Dira GeoSystems", email = "programmers@dirageosystems.ch" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: GIS",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "prosuite>=1.5.1",
+    "mcp[cli]==1.27.0",
+    "pydantic==2.13.3",
+]
+
+[project.scripts]
+prosuite-mcp = "prosuite_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://www.dirageosystems.ch"
+Repository = "https://github.com/ProSuite/prosuite-mcp"
+"Bug Tracker" = "https://github.com/ProSuite/prosuite-mcp/issues"
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "ruff==0.15.11",
+    "pyright==1.1.408",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prosuite_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+
+[tool.ruff.lint]
+select = ["I"]
+

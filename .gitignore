@@ -13,6 +13,7 @@ dist/
 .ruff_cache/
 .pyright/
 .pytest_cache/
+uv.lock
 
 # mcp local 
 .mcp.json

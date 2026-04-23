@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "enabledManagers": ["pep621", "github-actions"],
   "packageRules": [
     {
       "matchUpdateTypes": ["patch", "minor"],

@@ -169,7 +169,9 @@ def _run_stream(
     return issues_by_condition, verified_spec
 
 
-def _summarize(spec: VerifiedSpecification, issues_by_condition: dict[int, int]) -> dict[str, Any]:
+def _summarize(
+    spec: VerifiedSpecification, issues_by_condition: dict[int, int]
+) -> dict[str, Any]:
     return {
         "specification_name": spec.specification_name,
         "user_name": spec.user_name,
@@ -249,7 +251,9 @@ def run_verification(
     service = _make_service()
 
     try:
-        issues_by_condition, verified_spec = _run_stream(service, spec, output_dir, perimeter)
+        issues_by_condition, verified_spec = _run_stream(
+            service, spec, output_dir, perimeter
+        )
     except grpc.RpcError as exc:
         return {
             "status": "error",

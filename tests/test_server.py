@@ -204,8 +204,10 @@ def _mock_verified_spec() -> VerifiedSpecification:
 def test_run_verification_success():
     final_spec = _mock_verified_spec()
 
-    with patch("prosuite_mcp.server._make_service"), \
-         patch("prosuite_mcp.server._run_stream") as mock_stream:
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream") as mock_stream,
+    ):
         mock_stream.return_value = ({1: 2}, final_spec)
 
         result = run_verification(
@@ -236,8 +238,10 @@ def test_run_verification_grpc_error():
         def details(self):
             return "service unavailable"
 
-    with patch("prosuite_mcp.server._make_service"), \
-         patch("prosuite_mcp.server._run_stream") as mock_stream:
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream") as mock_stream,
+    ):
         mock_stream.side_effect = _FakeRpcError()
 
         result = run_verification(
@@ -275,8 +279,10 @@ def test_run_verification_unknown_condition():
 def test_run_verification_with_output_dir():
     final_spec = _mock_verified_spec()
 
-    with patch("prosuite_mcp.server._make_service"), \
-         patch("prosuite_mcp.server._run_stream") as mock_stream:
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream") as mock_stream,
+    ):
         mock_stream.return_value = ({1: 0}, final_spec)
 
         result = run_verification(

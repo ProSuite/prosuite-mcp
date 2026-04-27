@@ -172,15 +172,15 @@ def test_summarize():
         specification_name="Test Spec",
         user_name="alice",
         verified_conditions=[
-            VerifiedCondition(condition_id=1, name="cond_a", error_count=3),
+            VerifiedCondition(condition_id=1, name="cond_a", error_count=0),
             VerifiedCondition(condition_id=2, name="cond_b", error_count=0),
         ],
     )
-    result = _summarize(spec, issues_seen=3)
+    result = _summarize(spec, issues_by_condition={1: 3})
     assert result["total_errors"] == 3
     assert result["total_conditions"] == 2
-    assert result["issues_seen_in_stream"] == 3
     assert result["conditions"][0]["name"] == "cond_a"
+    assert result["conditions"][0]["errors"] == 3
     assert result["conditions"][1]["errors"] == 0
 
 
@@ -201,24 +201,14 @@ def _mock_verified_spec() -> VerifiedSpecification:
     )
 
 
-def _mock_response(issues: int = 0, verified_spec=None):
-    r = MagicMock()
-    r.issues = [MagicMock()] * issues
-    r.verified_specification = verified_spec
-    return r
-
-
 def test_run_verification_success():
     final_spec = _mock_verified_spec()
-    responses = [
-        _mock_response(issues=2),
-        _mock_response(verified_spec=final_spec),
-    ]
 
-    with patch("prosuite_mcp.server._make_service") as mock_make:
-        svc = MagicMock()
-        mock_make.return_value = svc
-        svc.verify.return_value = iter(responses)
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream") as mock_stream,
+    ):
+        mock_stream.return_value = ({1: 2}, final_spec)
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",
@@ -235,7 +225,7 @@ def test_run_verification_success():
     assert result["status"] == "success"
     assert result["total_errors"] == 2
     assert result["total_conditions"] == 1
-    assert result["issues_seen_in_stream"] == 2
+    assert result["conditions"][0]["errors"] == 2
 
 
 def test_run_verification_grpc_error():
@@ -248,10 +238,11 @@ def test_run_verification_grpc_error():
         def details(self):
             return "service unavailable"
 
-    with patch("prosuite_mcp.server._make_service") as mock_make:
-        svc = MagicMock()
-        mock_make.return_value = svc
-        svc.verify.side_effect = _FakeRpcError()
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream") as mock_stream,
+    ):
+        mock_stream.side_effect = _FakeRpcError()
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",
@@ -287,12 +278,12 @@ def test_run_verification_unknown_condition():
 
 def test_run_verification_with_output_dir():
     final_spec = _mock_verified_spec()
-    responses = [_mock_response(verified_spec=final_spec)]
 
-    with patch("prosuite_mcp.server._make_service") as mock_make:
-        svc = MagicMock()
-        mock_make.return_value = svc
-        svc.verify.return_value = iter(responses)
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream") as mock_stream,
+    ):
+        mock_stream.return_value = ({1: 0}, final_spec)
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",

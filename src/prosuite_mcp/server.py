@@ -180,7 +180,9 @@ def _summarize(
         "conditions": [
             {
                 "name": c.name or f"condition_{c.condition_id}",
-                "errors": issues_by_condition.get(c.condition_id, 0),
+                "errors": issues_by_condition.get(c.condition_id, 0)
+                if c.condition_id is not None
+                else 0,
             }
             for c in spec.verified_conditions
         ],

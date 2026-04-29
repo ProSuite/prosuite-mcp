@@ -6,14 +6,6 @@ MCP server that exposes [Dira ProSuite](https://www.dirageosystems.ch/prosuite?l
 
 A running ProSuite Quality Verification Server reachable from the host where this server runs.
 
-## Installation
-
-```bash
-pip install prosuite-mcp
-# or
-uv add prosuite-mcp
-```
-
 ## Configuration
 
 | Environment variable | Default | Description |
@@ -21,34 +13,61 @@ uv add prosuite-mcp
 | `PROSUITE_HOST` | `localhost` | ProSuite service host |
 | `PROSUITE_PORT` | `5151` | ProSuite service port |
 | `PROSUITE_SSL_CERT_PATH` | — | Path to PEM certificate for TLS |
+| `PROSUITE_SPEC_PATH` | — | Path to a `.qa.xml` spec file for domain-aware condition search |
 
 ## Usage
 
+Both options below assume you create a project directory first:
+
+```bash
+mkdir mytest
+cd mytest
+uv init
+uv add prosuite-mcp
+```
+
+### Claude Code CLI
+
+Register the server from inside `mytest`, then start Claude:
+
+```bash
+claude mcp add prosuite \
+  -e PROSUITE_HOST=localhost \
+  -e PROSUITE_PORT=5151 \
+  -e PROSUITE_SPEC_PATH="C:/path/to/spec.qa.xml" \
+  -- uv run prosuite-mcp
+
+claude
+```
+
+The `-- uv run prosuite-mcp` tells Claude Code to start the MCP server via `uv run` in the current project, so prosuite-mcp is resolved from the local `.venv`. Run `claude` from the same `mytest` directory each time.
+
 ### Claude Desktop
 
-Add to `claude_desktop_config.json`:
+Add to `claude_desktop_config.json` (find it via **Settings → Developer**):
 
 ```json
 {
   "mcpServers": {
     "prosuite": {
-      "command": "prosuite-mcp",
+      "command": "uv",
+      "args": ["run", "prosuite-mcp"],
+      "cwd": "C:\\mytest",
       "env": {
         "PROSUITE_HOST": "localhost",
-        "PROSUITE_PORT": "5151"
+        "PROSUITE_PORT": "5151",
+        "PROSUITE_SPEC_PATH": "C:\\path\\to\\spec.qa.xml"
       }
     }
   }
 }
 ```
 
-### CLI
-
-```bash
-prosuite-mcp   # starts the server on stdio
-```
+`cwd` points to the `mytest` directory so `uv run` can find the local install. Restart Claude Desktop after editing the file.
 
 ## Tools
+
+**`search_spec <query> [max_results]`** — Searches the loaded `.qa.xml` spec for conditions matching a natural-language query (English, German, French, Italian). Returns up to `max_results` (default 20) matching conditions with pre-filled `condition_request` blocks ready to pass directly to `run_verification`, plus the `required_datasets` list. Requires `PROSUITE_SPEC_PATH`.
 
 **`list_conditions [search]`** — Lists available quality conditions. Pass a keyword to filter by name or description.
 
@@ -71,9 +90,11 @@ Returns a summary with `status`, `total_errors`, and a per-condition breakdown.
 
 Once connected, you talk to Claude in plain language:
 
-> Check that all features in the Roads layer in `C:/data/my.gdb` are at least 0.5 m long.
+> Check road connectivity in `C:/data/tlm.sde`.
 
-Claude uses `list_conditions` and `describe_condition` to find the right condition and its parameters, then calls `run_verification` and returns a summary of errors per condition.
+With a spec loaded, Claude calls `search_spec` to find the relevant pre-configured conditions from the `.qa.xml` file, then calls `run_verification` with the pre-filled parameters and returns a summary of errors per condition.
+
+Without a spec, Claude uses `list_conditions` and `describe_condition` to find and configure conditions from scratch.
 
 ## Development
 

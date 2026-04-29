@@ -113,7 +113,10 @@ def test_descriptor_no_version():
 
 
 def test_descriptor_no_version_multi_word():
-    assert _descriptor_to_method("ObjectAttributeConstraint") == "qa_object_attribute_constraint"
+    assert (
+        _descriptor_to_method("ObjectAttributeConstraint")
+        == "qa_object_attribute_constraint"
+    )
 
 
 def test_descriptor_none_on_garbage():
@@ -200,13 +203,17 @@ def test_must_intersect_method(must_intersect):
 
 
 def test_must_intersect_list_params(must_intersect):
-    fc_param = next(p for p in must_intersect.dataset_params if p.py_name == "feature_classes")
+    fc_param = next(
+        p for p in must_intersect.dataset_params if p.py_name == "feature_classes"
+    )
     assert fc_param.is_list is True
     assert fc_param.dataset_name == "MY_ROADS"
 
 
 def test_must_intersect_other_list_params(must_intersect):
-    other = next(p for p in must_intersect.dataset_params if p.py_name == "other_feature_classes")
+    other = next(
+        p for p in must_intersect.dataset_params if p.py_name == "other_feature_classes"
+    )
     assert other.is_list is True
     assert other.dataset_name == "MY_INTERSECTIONS"
 

@@ -201,7 +201,9 @@ def search_spec(
         c
         for c in conditions
         if not c.unsupported
-        and (q in c.name.lower() or q in c.description.lower() or q in c.category.lower())
+        and (
+            q in c.name.lower() or q in c.description.lower() or q in c.category.lower()
+        )
     ]
 
     results = []

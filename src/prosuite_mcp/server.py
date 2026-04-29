@@ -15,6 +15,8 @@ from pydantic import BaseModel
 
 from .catalog import CATALOG, ParamInfo
 from .config import load_config
+from .spec import SpecCondition, load_spec
+from .spec import search_spec as _search_spec
 
 mcp = FastMCP(
     "ProSuite MCP",
@@ -86,6 +88,47 @@ def describe_condition(name: str) -> str:
         lines.append(f"  {p.name} ({p.type_hint}) — {kind}")
 
     return "\n".join(lines)
+
+
+_spec_conditions: list[SpecCondition] | None = None
+
+
+def _get_spec() -> list[SpecCondition] | None:
+    global _spec_conditions
+    if _spec_conditions is None:
+        cfg = load_config()
+        if cfg.spec_path:
+            _spec_conditions = load_spec(cfg.spec_path)
+    return _spec_conditions
+
+
+@mcp.tool()
+def search_spec(query: str, max_results: int = 20) -> dict:
+    """
+    Search the loaded QA spec for conditions matching a natural-language query.
+
+    Returns up to max_results conditions whose name, description, or category
+    contains the query string (case-insensitive). Claude bridges any language
+    gap — queries in English, German, French, or Italian all work.
+
+    Each result includes:
+    - name: the full condition name (human-readable rule statement)
+    - category: domain grouping from the spec
+    - allow_errors: False means a hard failure, True means tolerated
+    - condition_request: ready to pass directly into run_verification's
+      conditions list (includes condition method name and pre-filled params)
+    - required_datasets: dataset names and filter expressions to include in
+      run_verification's datasets list
+
+    Requires PROSUITE_SPEC_PATH to be configured. Returns an error dict if
+    no spec is loaded.
+    """
+    conditions = _get_spec()
+    if conditions is None:
+        return {
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."
+        }
+    return _search_spec(conditions, query, max_results=max_results)
 
 
 def _make_service() -> Service:

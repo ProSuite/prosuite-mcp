@@ -24,6 +24,11 @@ dependencies = [
     "pydantic==2.13.3",
 ]
 
+[project.optional-dependencies]
+local-llm = [
+    "openai>=1.0.0",
+]
+
 [project.scripts]
 prosuite-mcp = "prosuite_mcp.cli:main"
 

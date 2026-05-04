@@ -65,6 +65,35 @@ Add to `claude_desktop_config.json` (find it via **Settings → Developer**):
 
 `cwd` points to the `mytest` directory so `uv run` can find the local install. Restart Claude Desktop after editing the file.
 
+### VS Code (GitHub Copilot Chat)
+
+Requires the [GitHub Copilot Chat](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat) extension and agent mode enabled in VS Code settings:
+
+```json
+"github.copilot.chat.agentMode.enabled": true
+```
+
+Open `mytest` as a workspace in VS Code, then create `.vscode/mcp.json` inside it:
+
+```json
+{
+  "servers": {
+    "prosuite": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--directory", "${workspaceFolder}", "prosuite-mcp"],
+      "env": {
+        "PROSUITE_HOST": "localhost",
+        "PROSUITE_PORT": "5151",
+        "PROSUITE_SPEC_PATH": "C:\\path\\to\\spec.qa.xml"
+      }
+    }
+  }
+}
+```
+
+VS Code will prompt you to start the server when it detects `.vscode/mcp.json`. Once running, open Copilot Chat, switch to **Agent mode**, and talk to it the same way as with Claude.
+
 ## Tools
 
 **`search_spec <query> [max_results]`** — Searches the loaded `.qa.xml` spec for conditions matching a natural-language query (English, German, French, Italian). Returns up to `max_results` (default 20) matching conditions with pre-filled `condition_request` blocks ready to pass directly to `run_verification`, plus the `required_datasets` list. Requires `PROSUITE_SPEC_PATH`.

@@ -244,7 +244,7 @@ def _build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
 
 def _run_stream(
     service: Service,
-    spec: Specification,
+    spec: Specification | XmlSpecification,
     output_dir: str | None,
     perimeter,
 ) -> tuple[dict[int, int], VerifiedSpecification | None]:
@@ -437,7 +437,7 @@ def run_xml_verification(
     try:
         issues_by_condition, verified_spec = _run_stream(
             service, xml_spec, output_dir, perimeter
-        )  # type: ignore[arg-type]
+        )
     except grpc.RpcError as exc:
         return {"status": "error", "error": f"gRPC {exc.code()}: {exc.details()}"}
 

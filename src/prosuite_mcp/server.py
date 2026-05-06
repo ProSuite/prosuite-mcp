@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from prosuite import EnvelopePerimeter, Service
 from prosuite.data_model import Dataset, Model
 from prosuite.factories.quality_conditions import Conditions
-from prosuite.quality import Specification
+from prosuite.quality import Specification, XmlSpecification
 from prosuite.verification import VerifiedSpecification
 from prosuite.verification.advanced_parameters import AdvancedParameters
 from pydantic import BaseModel
@@ -33,6 +33,11 @@ class DatasetRef(BaseModel):
 class ConditionRequest(BaseModel):
     condition: str
     params: dict[str, Any] = {}
+
+
+class WorkspaceReplacement(BaseModel):
+    workspace_id: str
+    workspace_path: str
 
 
 @mcp.tool()
@@ -89,6 +94,28 @@ def describe_condition(name: str) -> str:
         lines.append(f"  {p.name} ({p.type_hint}) — {kind}")
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+def describe_spec() -> dict:
+    """
+    Describe the loaded QA spec file: available specifications, workspace definitions,
+    and per-specification summary of conditions, workspace IDs, and dataset names.
+
+    Call this before run_xml_verification to learn:
+    - Which specification_name values exist in the spec (pass one to run_xml_verification)
+    - Which workspace_id values need to be replaced with real paths
+    - Which datasets each specification expects (useful for sanity-checking the workspace)
+
+    Requires PROSUITE_SPEC_PATH to be configured.
+    """
+    cfg = load_config()
+    if not cfg.spec_path:
+        return {"error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."}
+    try:
+        return get_spec_metadata(cfg.spec_path)
+    except Exception as exc:
+        return {"error": f"Failed to read spec: {exc}"}
 
 
 _spec_conditions: list[SpecCondition] | None = None
@@ -334,6 +361,77 @@ def run_verification(
             "status": "error",
             "error": f"gRPC {exc.code()}: {exc.details()}",
         }
+
+    if verified_spec is None:
+        return {
+            "status": "error",
+            "error": "Verification stream ended without a final summary.",
+            "total_errors": sum(issues_by_condition.values()),
+        }
+
+    summary = _summarize(verified_spec, issues_by_condition)
+    summary["status"] = "success"
+    if output_dir:
+        summary["output_dir"] = output_dir
+    return summary
+
+
+@mcp.tool()
+def run_xml_verification(
+    specification_name: str,
+    data_source_replacements: list[WorkspaceReplacement],
+    output_dir: str | None = None,
+    envelope: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """
+    Run a ProSuite quality verification directly from the loaded XML spec file.
+
+    Unlike run_verification, this tool sends the XML spec to the ProSuite service
+    as-is, without decomposing it into individual conditions and datasets. This
+    preserves per-condition dataset filters, default scalar values, and all other
+    spec details exactly as configured.
+
+    Use search_spec (with empty query) to discover available specification_name
+    values and workspace_id keys that need to be replaced.
+
+    Args:
+        specification_name: Name of the QualitySpecification element inside the
+            XML file to run (e.g. 'Copy of DATA_OSM_10_Demo').
+        data_source_replacements: Maps each workspace_id in the XML to the actual
+            workspace path on the ProSuite server. Example:
+            [{"workspace_id": "DATA_OSM", "workspace_path": "C:/data/osm.sde"}]
+        output_dir: Optional server-side directory for Issues.gdb and HTML report.
+        envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
+
+    Returns a summary with status, total_errors, and per-condition breakdown.
+    Requires PROSUITE_SPEC_PATH to be configured.
+    """
+    cfg = load_config()
+    if not cfg.spec_path:
+        return {"error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."}
+
+    replacements = [[r.workspace_id, r.workspace_path] for r in data_source_replacements]
+
+    try:
+        xml_spec = XmlSpecification(cfg.spec_path, specification_name, replacements)
+    except Exception as exc:
+        return {"status": "error", "error": f"Failed to load spec: {exc}"}
+
+    perimeter = None
+    if envelope:
+        perimeter = EnvelopePerimeter(
+            x_min=envelope["x_min"],
+            y_min=envelope["y_min"],
+            x_max=envelope["x_max"],
+            y_max=envelope["y_max"],
+        )
+
+    service = _make_service()
+
+    try:
+        issues_by_condition, verified_spec = _run_stream(service, xml_spec, output_dir, perimeter)  # type: ignore[arg-type]
+    except grpc.RpcError as exc:
+        return {"status": "error", "error": f"gRPC {exc.code()}: {exc.details()}"}
 
     if verified_spec is None:
         return {

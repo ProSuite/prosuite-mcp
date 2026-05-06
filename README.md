@@ -42,28 +42,17 @@ claude
 
 The `-- uv run prosuite-mcp` tells Claude Code to start the MCP server via `uv run` in the current project, so prosuite-mcp is resolved from the local `.venv`. Run `claude` from the same `mytest` directory each time.
 
-### Claude Desktop
+### Copilot CLI
 
-Add to `claude_desktop_config.json` (find it via **Settings → Developer**):
+Register the server from inside `mytest`, then start Copilot:
 
-```json
-{
-  "mcpServers": {
-    "prosuite": {
-      "command": "uv",
-      "args": ["run", "prosuite-mcp"],
-      "cwd": "C:\\mytest",
-      "env": {
-        "PROSUITE_HOST": "localhost",
-        "PROSUITE_PORT": "5151",
-        "PROSUITE_SPEC_PATH": "C:\\path\\to\\spec.qa.xml"
-      }
-    }
-  }
-}
+```bash
+copilot mcp add prosuite \
+  -e PROSUITE_HOST=localhost \
+  -e PROSUITE_PORT=5151 \
+  -e PROSUITE_SPEC_PATH="C:/path/to/spec.qa.xml" \
+  -- uv run prosuite-mcp
 ```
-
-`cwd` points to the `mytest` directory so `uv run` can find the local install. Restart Claude Desktop after editing the file.
 
 ## Tools
 

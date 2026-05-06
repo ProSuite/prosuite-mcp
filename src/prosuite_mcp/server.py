@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from .catalog import CATALOG, ParamInfo
 from .config import load_config
-from .spec import SpecCondition, load_spec
+from .spec import SpecCondition, load_spec as _load_spec
 from .spec import search_spec as _search_spec
 
 mcp = FastMCP(
@@ -98,7 +98,7 @@ def _get_spec() -> list[SpecCondition] | None:
     if _spec_conditions is None:
         cfg = load_config()
         if cfg.spec_path:
-            _spec_conditions = load_spec(cfg.spec_path)
+            _spec_conditions = _load_spec(cfg.spec_path)
     return _spec_conditions
 
 
@@ -126,9 +126,38 @@ def search_spec(query: str, max_results: int = 20) -> dict:
     conditions = _get_spec()
     if conditions is None:
         return {
-            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first."
         }
     return _search_spec(conditions, query, max_results=max_results)
+
+
+@mcp.tool()
+def load_spec(path: str) -> dict:
+    """
+    Load a .qa.xml spec file at runtime.
+
+    Replaces any previously loaded spec so that subsequent search_spec calls
+    use the new file. Use this when the spec path is only known at conversation
+    time (e.g. a file on OneDrive or a network share) instead of pre-configuring
+    PROSUITE_SPEC_PATH.
+
+    Args:
+        path: Absolute path to the .qa.xml spec file on the local machine.
+
+    Returns a dict with 'conditions_loaded' on success, or 'error' on failure.
+    """
+    global _spec_conditions
+    from pathlib import Path
+
+    p = Path(path)
+    if not p.exists():
+        return {"error": f"File not found: {path}"}
+    try:
+        loaded = _load_spec(path)
+    except Exception as exc:
+        return {"error": f"Failed to parse spec: {exc}"}
+    _spec_conditions = loaded
+    return {"status": "ok", "conditions_loaded": len(loaded), "path": path}
 
 
 def _make_service() -> Service:

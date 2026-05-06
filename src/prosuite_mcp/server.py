@@ -111,7 +111,9 @@ def describe_spec() -> dict:
     """
     cfg = load_config()
     if not cfg.spec_path:
-        return {"error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."}
+        return {
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."
+        }
     try:
         return get_spec_metadata(cfg.spec_path)
     except Exception as exc:
@@ -408,9 +410,13 @@ def run_xml_verification(
     """
     cfg = load_config()
     if not cfg.spec_path:
-        return {"error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."}
+        return {
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."
+        }
 
-    replacements = [[r.workspace_id, r.workspace_path] for r in data_source_replacements]
+    replacements = [
+        [r.workspace_id, r.workspace_path] for r in data_source_replacements
+    ]
 
     try:
         xml_spec = XmlSpecification(cfg.spec_path, specification_name, replacements)
@@ -429,7 +435,9 @@ def run_xml_verification(
     service = _make_service()
 
     try:
-        issues_by_condition, verified_spec = _run_stream(service, xml_spec, output_dir, perimeter)  # type: ignore[arg-type]
+        issues_by_condition, verified_spec = _run_stream(
+            service, xml_spec, output_dir, perimeter
+        )  # type: ignore[arg-type]
     except grpc.RpcError as exc:
         return {"status": "error", "error": f"gRPC {exc.code()}: {exc.details()}"}
 

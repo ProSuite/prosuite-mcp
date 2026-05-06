@@ -202,7 +202,10 @@ def get_spec_metadata(path: str) -> dict:
         for ws in ws_el:
             wid = ws.get("id", "")
             if wid:
-                workspaces[wid] = {"workspace_id": wid, "model_name": ws.get("modelName", "")}
+                workspaces[wid] = {
+                    "workspace_id": wid,
+                    "model_name": ws.get("modelName", ""),
+                }
 
     condition_refs: dict[str, tuple[set[str], set[str]]] = {}
     conds_el = root.find("qa:QualityConditions", _NS)
@@ -242,12 +245,14 @@ def get_spec_metadata(path: str) -> dict:
                     ws, ds = condition_refs[cname]
                     all_ws.update(ws)
                     all_ds.update(ds)
-            specs.append({
-                "specification_name": sname,
-                "condition_count": len(cond_names),
-                "workspace_ids": sorted(all_ws),
-                "datasets": sorted(all_ds),
-            })
+            specs.append(
+                {
+                    "specification_name": sname,
+                    "condition_count": len(cond_names),
+                    "workspace_ids": sorted(all_ws),
+                    "datasets": sorted(all_ds),
+                }
+            )
 
     return {"specifications": specs, "workspaces": list(workspaces.values())}
 

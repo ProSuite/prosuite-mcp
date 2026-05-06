@@ -15,7 +15,8 @@ from pydantic import BaseModel
 
 from .catalog import CATALOG, ParamInfo
 from .config import load_config
-from .spec import SpecCondition, load_spec as _load_spec
+from .spec import SpecCondition
+from .spec import load_spec as _load_spec
 from .spec import search_spec as _search_spec
 
 mcp = FastMCP(

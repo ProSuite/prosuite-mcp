@@ -562,7 +562,10 @@ def test_run_xml_verification_auto_creates_output_dir(tmp_path):
     final_spec = _mock_xml_verified_spec()
 
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
@@ -582,7 +585,10 @@ def test_run_xml_verification_explicit_output_dir_not_overridden(tmp_path):
     final_spec = _mock_xml_verified_spec()
 
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),

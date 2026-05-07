@@ -16,9 +16,11 @@ from prosuite_mcp.server import (
     _resolve_param,
     _summarize,
     describe_condition,
+    describe_spec,
     list_conditions,
     load_spec,
     run_verification,
+    run_xml_verification,
 )
 
 _MINIMAL_XML = textwrap.dedent("""\
@@ -359,6 +361,138 @@ def test_run_verification_with_output_dir():
                     params={"feature_class": "Roads", "tolerance": 0.01},
                 )
             ],
+            output_dir="C:/output",
+        )
+
+    assert result["status"] == "success"
+    assert result["output_dir"] == "C:/output"
+
+
+# ---------------------------------------------------------------------------
+# describe_spec
+# ---------------------------------------------------------------------------
+
+
+def _cfg(spec_path: str | None = None):
+    from prosuite_mcp.config import Config
+
+    return Config(host="localhost", port=5151, ssl_cert_path=None, spec_path=spec_path)
+
+
+def test_describe_spec_no_spec_configured():
+    with patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path=None)):
+        result = describe_spec()
+    assert "error" in result
+    assert "PROSUITE_SPEC_PATH" in result["error"]
+
+
+def test_describe_spec_returns_metadata():
+    fake_meta = {"specifications": [], "workspaces": []}
+    with (
+        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch("prosuite_mcp.server.get_spec_metadata", return_value=fake_meta),
+    ):
+        result = describe_spec()
+    assert result == fake_meta
+
+
+# ---------------------------------------------------------------------------
+# run_xml_verification
+# ---------------------------------------------------------------------------
+
+
+def _mock_xml_verified_spec() -> VerifiedSpecification:
+    return VerifiedSpecification(
+        specification_name="Spec_A",
+        user_name="",
+        verified_conditions=[
+            VerifiedCondition(condition_id=10, name="Cond_A", error_count=0),
+        ],
+    )
+
+
+def test_run_xml_verification_no_spec_configured():
+    with patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path=None)):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+        )
+    assert "error" in result
+    assert "PROSUITE_SPEC_PATH" in result["error"]
+
+
+def test_run_xml_verification_success():
+    final_spec = _mock_xml_verified_spec()
+
+    with (
+        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch("prosuite_mcp.server.XmlSpecification"),
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+    ):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+        )
+
+    assert result["status"] == "success"
+    assert result["total_errors"] == 0
+    assert result["conditions"][0]["name"] == "Cond_A"
+
+
+def test_run_xml_verification_grpc_error():
+    import grpc
+
+    class _FakeRpcError(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.UNAVAILABLE
+
+        def details(self):
+            return "service unavailable"
+
+    with (
+        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch("prosuite_mcp.server.XmlSpecification"),
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", side_effect=_FakeRpcError()),
+    ):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+        )
+
+    assert result["status"] == "error"
+    assert "unavailable" in result["error"].lower()
+
+
+def test_run_xml_verification_no_final_summary():
+    with (
+        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch("prosuite_mcp.server.XmlSpecification"),
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({10: 3}, None)),
+    ):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+        )
+
+    assert result["status"] == "error"
+    assert result["total_errors"] == 3
+
+
+def test_run_xml_verification_output_dir_in_result():
+    final_spec = _mock_xml_verified_spec()
+
+    with (
+        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch("prosuite_mcp.server.XmlSpecification"),
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+    ):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
             output_dir="C:/output",
         )
 

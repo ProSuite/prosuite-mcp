@@ -11,6 +11,7 @@ from prosuite_mcp.spec import (
     SpecCondition,
     _descriptor_to_method,
     _to_snake,
+    get_spec_metadata,
     load_spec,
     search_spec,
 )
@@ -304,3 +305,102 @@ def test_search_spec_tool_with_spec(conditions):
     with patch("prosuite_mcp.server._get_spec", return_value=conditions):
         result = tool_search_spec("minimum length")
     assert result["total_matches"] == 1
+
+
+# ---------------------------------------------------------------------------
+# get_spec_metadata
+# ---------------------------------------------------------------------------
+
+_METADATA_XML = textwrap.dedent("""\
+    <?xml version="1.0" encoding="utf-8"?>
+    <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+      <Workspaces>
+        <Workspace id="DATA_OSM" modelName="MyModel" />
+        <Workspace id="DATA_REF" modelName="RefModel" />
+      </Workspaces>
+      <QualityConditions>
+        <QualityCondition name="Cond_A">
+          <Parameters>
+            <Dataset parameter="fc" workspace="DATA_OSM" value="ROADS" />
+          </Parameters>
+        </QualityCondition>
+        <QualityCondition name="Cond_B">
+          <Parameters>
+            <Dataset parameter="fc" workspace="DATA_OSM" value="BUILDINGS" />
+            <Dataset parameter="other" workspace="DATA_REF" value="PARCELS" />
+          </Parameters>
+        </QualityCondition>
+      </QualityConditions>
+      <QualitySpecifications>
+        <QualitySpecification name="Spec_A">
+          <Elements>
+            <Element qualityCondition="Cond_A" />
+          </Elements>
+        </QualitySpecification>
+        <QualitySpecification name="Spec_B">
+          <Elements>
+            <Element qualityCondition="Cond_A" />
+            <Element qualityCondition="Cond_B" />
+          </Elements>
+        </QualitySpecification>
+      </QualitySpecifications>
+    </DataQuality>
+""")
+
+
+@pytest.fixture()
+def metadata_file(tmp_path):
+    p = tmp_path / "meta.qa.xml"
+    p.write_text(_METADATA_XML, encoding="utf-8")
+    return str(p)
+
+
+@pytest.fixture()
+def metadata(metadata_file):
+    return get_spec_metadata(metadata_file)
+
+
+def test_metadata_workspaces_returned(metadata):
+    ws = metadata["workspaces"]
+    assert len(ws) == 2
+    ids = {w["workspace_id"] for w in ws}
+    assert ids == {"DATA_OSM", "DATA_REF"}
+
+
+def test_metadata_workspace_model_name(metadata):
+    osm = next(w for w in metadata["workspaces"] if w["workspace_id"] == "DATA_OSM")
+    assert osm["model_name"] == "MyModel"
+
+
+def test_metadata_specification_names(metadata):
+    names = [s["specification_name"] for s in metadata["specifications"]]
+    assert names == ["Spec_A", "Spec_B"]
+
+
+def test_metadata_condition_count(metadata):
+    spec_a = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_A")
+    assert spec_a["condition_count"] == 1
+    spec_b = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_B")
+    assert spec_b["condition_count"] == 2
+
+
+def test_metadata_workspace_ids_per_spec(metadata):
+    spec_b = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_B")
+    assert sorted(spec_b["workspace_ids"]) == ["DATA_OSM", "DATA_REF"]
+
+
+def test_metadata_datasets_per_spec(metadata):
+    spec_b = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_B")
+    assert spec_b["datasets"] == ["BUILDINGS", "PARCELS", "ROADS"]
+
+
+def test_metadata_empty_xml_no_crash(tmp_path):
+    p = tmp_path / "empty.qa.xml"
+    p.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0" />',
+        encoding="utf-8",
+    )
+    result = get_spec_metadata(str(p))
+    assert result["specifications"] == []
+    assert result["workspaces"] == []

@@ -191,6 +191,72 @@ def load_spec(path: str) -> list[SpecCondition]:
     return [_parse_condition(el, cat, list_params) for el, cat in pairs]
 
 
+def get_spec_metadata(path: str) -> dict:
+    """Return spec names, workspace definitions, and per-spec dataset/workspace summary."""
+    tree = ET.parse(path)
+    root = tree.getroot()
+
+    workspaces: dict[str, dict] = {}
+    ws_el = root.find("qa:Workspaces", _NS)
+    if ws_el is not None:
+        for ws in ws_el:
+            wid = ws.get("id", "")
+            if wid:
+                workspaces[wid] = {
+                    "workspace_id": wid,
+                    "model_name": ws.get("modelName", ""),
+                }
+
+    condition_refs: dict[str, tuple[set[str], set[str]]] = {}
+    conds_el = root.find("qa:QualityConditions", _NS)
+    if conds_el is not None:
+        for cond in conds_el:
+            cname = cond.get("name", "")
+            ws_ids: set[str] = set()
+            ds_names: set[str] = set()
+            params_el = cond.find("qa:Parameters", _NS)
+            if params_el is not None:
+                for p in params_el:
+                    if p.tag.split("}")[-1] == "Dataset":
+                        wid = p.get("workspace", "")
+                        value = p.get("value", "")
+                        if wid:
+                            ws_ids.add(wid)
+                        if value:
+                            ds_names.add(value)
+            condition_refs[cname] = (ws_ids, ds_names)
+
+    specs = []
+    specs_el = root.find("qa:QualitySpecifications", _NS)
+    if specs_el is not None:
+        for spec_el in specs_el:
+            sname = spec_el.get("name", "")
+            cond_names: list[str] = []
+            elements_el = spec_el.find("qa:Elements", _NS)
+            if elements_el is not None:
+                for el in elements_el:
+                    cref = el.get("qualityCondition", "")
+                    if cref:
+                        cond_names.append(cref)
+            all_ws: set[str] = set()
+            all_ds: set[str] = set()
+            for cname in cond_names:
+                if cname in condition_refs:
+                    ws, ds = condition_refs[cname]
+                    all_ws.update(ws)
+                    all_ds.update(ds)
+            specs.append(
+                {
+                    "specification_name": sname,
+                    "condition_count": len(cond_names),
+                    "workspace_ids": sorted(all_ws),
+                    "datasets": sorted(all_ds),
+                }
+            )
+
+    return {"specifications": specs, "workspaces": list(workspaces.values())}
+
+
 def search_spec(
     conditions: list[SpecCondition],
     query: str,

@@ -13,6 +13,7 @@ from prosuite_mcp.server import (
     ConditionRequest,
     DatasetRef,
     _build_condition,
+    _make_run_dir,
     _resolve_param,
     _summarize,
     describe_condition,
@@ -267,14 +268,16 @@ def _mock_verified_spec() -> VerifiedSpecification:
     )
 
 
-def test_run_verification_success():
+def test_run_verification_success(tmp_path):
     final_spec = _mock_verified_spec()
 
     with (
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream") as mock_stream,
+        patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_stream.return_value = ({1: 2}, final_spec)
+        mock_path.cwd.return_value = tmp_path
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",
@@ -294,7 +297,7 @@ def test_run_verification_success():
     assert result["conditions"][0]["errors"] == 2
 
 
-def test_run_verification_grpc_error():
+def test_run_verification_grpc_error(tmp_path):
     import grpc
 
     class _FakeRpcError(grpc.RpcError):
@@ -307,8 +310,10 @@ def test_run_verification_grpc_error():
     with (
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream") as mock_stream,
+        patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_stream.side_effect = _FakeRpcError()
+        mock_path.cwd.return_value = tmp_path
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",
@@ -424,7 +429,7 @@ def test_run_xml_verification_no_spec_configured():
     assert "PROSUITE_SPEC_PATH" in result["error"]
 
 
-def test_run_xml_verification_success():
+def test_run_xml_verification_success(tmp_path):
     final_spec = _mock_xml_verified_spec()
 
     with (
@@ -435,7 +440,9 @@ def test_run_xml_verification_success():
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+        patch("prosuite_mcp.server.Path") as mock_path,
     ):
+        mock_path.cwd.return_value = tmp_path
         result = run_xml_verification(
             specification_name="Spec_A",
             data_source_replacements=[],
@@ -446,7 +453,7 @@ def test_run_xml_verification_success():
     assert result["conditions"][0]["name"] == "Cond_A"
 
 
-def test_run_xml_verification_grpc_error():
+def test_run_xml_verification_grpc_error(tmp_path):
     import grpc
 
     class _FakeRpcError(grpc.RpcError):
@@ -464,7 +471,9 @@ def test_run_xml_verification_grpc_error():
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", side_effect=_FakeRpcError()),
+        patch("prosuite_mcp.server.Path") as mock_path,
     ):
+        mock_path.cwd.return_value = tmp_path
         result = run_xml_verification(
             specification_name="Spec_A",
             data_source_replacements=[],
@@ -474,7 +483,7 @@ def test_run_xml_verification_grpc_error():
     assert "unavailable" in result["error"].lower()
 
 
-def test_run_xml_verification_no_final_summary():
+def test_run_xml_verification_no_final_summary(tmp_path):
     with (
         patch(
             "prosuite_mcp.server.load_config",
@@ -483,7 +492,9 @@ def test_run_xml_verification_no_final_summary():
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 3}, None)),
+        patch("prosuite_mcp.server.Path") as mock_path,
     ):
+        mock_path.cwd.return_value = tmp_path
         result = run_xml_verification(
             specification_name="Spec_A",
             data_source_replacements=[],
@@ -513,3 +524,132 @@ def test_run_xml_verification_output_dir_in_result():
 
     assert result["status"] == "success"
     assert result["output_dir"] == "C:/output"
+
+
+# ---------------------------------------------------------------------------
+# _make_run_dir
+# ---------------------------------------------------------------------------
+
+
+def test_make_run_dir_creates_directory(tmp_path):
+    result = _make_run_dir("MySpec", tmp_path)
+    assert result.exists()
+    assert result.is_dir()
+
+
+def test_make_run_dir_is_inside_base(tmp_path):
+    result = _make_run_dir("MySpec", tmp_path)
+    assert result.parent == tmp_path
+
+
+def test_make_run_dir_name_contains_spec(tmp_path):
+    result = _make_run_dir("MySpec", tmp_path)
+    assert "MySpec" in result.name
+
+
+def test_make_run_dir_sanitizes_spaces_and_special_chars(tmp_path):
+    result = _make_run_dir("Copy of DATA OSM 10/Demo", tmp_path)
+    assert " " not in result.name
+    assert "/" not in result.name
+
+
+# ---------------------------------------------------------------------------
+# run_xml_verification -- auto output_dir
+# ---------------------------------------------------------------------------
+
+
+def test_run_xml_verification_auto_creates_output_dir(tmp_path):
+    final_spec = _mock_xml_verified_spec()
+
+    with (
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
+        patch("prosuite_mcp.server.XmlSpecification"),
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+        )
+
+    assert "output_dir" in result
+    assert result["status"] == "success"
+
+
+def test_run_xml_verification_explicit_output_dir_not_overridden(tmp_path):
+    final_spec = _mock_xml_verified_spec()
+
+    with (
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
+        patch("prosuite_mcp.server.XmlSpecification"),
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+    ):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+            output_dir="C:/my_dir",
+        )
+
+    assert result["output_dir"] == "C:/my_dir"
+
+
+# ---------------------------------------------------------------------------
+# run_verification -- auto output_dir
+# ---------------------------------------------------------------------------
+
+
+def test_run_verification_auto_creates_output_dir(tmp_path):
+    final_spec = _mock_verified_spec()
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({1: 2}, final_spec)),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_verification(
+            model_catalog_path="C:/test.gdb",
+            model_name="TestModel",
+            datasets=[DatasetRef(name="Roads")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa3d_constant_z_0",
+                    params={"feature_class": "Roads", "tolerance": 0.01},
+                )
+            ],
+        )
+
+    assert "output_dir" in result
+    assert result["status"] == "success"
+
+
+def test_run_verification_explicit_output_dir_not_overridden(tmp_path):
+    final_spec = _mock_verified_spec()
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_stream", return_value=({1: 0}, final_spec)),
+    ):
+        result = run_verification(
+            model_catalog_path="C:/test.gdb",
+            model_name="TestModel",
+            datasets=[DatasetRef(name="Roads")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa3d_constant_z_0",
+                    params={"feature_class": "Roads", "tolerance": 0.01},
+                )
+            ],
+            output_dir="C:/my_dir",
+        )
+
+    assert result["output_dir"] == "C:/my_dir"

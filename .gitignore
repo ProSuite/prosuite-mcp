@@ -15,5 +15,8 @@ dist/
 .pytest_cache/
 uv.lock
 
-# mcp local 
+# mcp local
 .mcp.json
+
+# verification run logs
+runs/

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import grpc
@@ -38,6 +41,14 @@ class ConditionRequest(BaseModel):
 class WorkspaceReplacement(BaseModel):
     workspace_id: str
     workspace_path: str
+
+
+def _make_run_dir(name: str, base: Path) -> Path:
+    ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+    safe = re.sub(r"[^\w-]", "_", name)
+    path = base / f"{ts}_{safe}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 @mcp.tool()
@@ -352,6 +363,9 @@ def run_verification(
             y_max=envelope["y_max"],
         )
 
+    if output_dir is None:
+        output_dir = str(_make_run_dir("adhoc", Path.cwd() / "runs"))
+
     service = _make_service()
 
     try:
@@ -373,8 +387,7 @@ def run_verification(
 
     summary = _summarize(verified_spec, issues_by_condition)
     summary["status"] = "success"
-    if output_dir:
-        summary["output_dir"] = output_dir
+    summary["output_dir"] = output_dir
     return summary
 
 
@@ -432,6 +445,9 @@ def run_xml_verification(
             y_max=envelope["y_max"],
         )
 
+    if output_dir is None:
+        output_dir = str(_make_run_dir(specification_name, Path.cwd() / "runs"))
+
     service = _make_service()
 
     try:
@@ -450,6 +466,5 @@ def run_xml_verification(
 
     summary = _summarize(verified_spec, issues_by_condition)
     summary["status"] = "success"
-    if output_dir:
-        summary["output_dir"] = output_dir
+    summary["output_dir"] = output_dir
     return summary

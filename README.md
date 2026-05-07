@@ -13,7 +13,6 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 | `PROSUITE_HOST` | `localhost` | ProSuite service host |
 | `PROSUITE_PORT` | `5151` | ProSuite service port |
 | `PROSUITE_SSL_CERT_PATH` | — | Path to PEM certificate for TLS |
-| `PROSUITE_SPEC_PATH` | — | Path to a `.qa.xml` spec file for domain-aware condition search |
 
 ## Usage
 
@@ -34,7 +33,6 @@ Register the server from inside `mytest`, then start Claude:
 claude mcp add prosuite \
   -e PROSUITE_HOST=localhost \
   -e PROSUITE_PORT=5151 \
-  -e PROSUITE_SPEC_PATH="C:/path/to/spec.qa.xml" \
   -- uv run prosuite-mcp
 
 claude
@@ -50,13 +48,14 @@ Register the server from inside `mytest`, then start Copilot:
 copilot mcp add prosuite \
   -e PROSUITE_HOST=localhost \
   -e PROSUITE_PORT=5151 \
-  -e PROSUITE_SPEC_PATH="C:/path/to/spec.qa.xml" \
   -- uv run prosuite-mcp
 ```
 
 ## Tools
 
-**`search_spec <query> [max_results]`** — Searches the loaded `.qa.xml` spec for conditions matching a natural-language query (English, German, French, Italian). Returns up to `max_results` (default 20) matching conditions with pre-filled `condition_request` blocks ready to pass directly to `run_verification`, plus the `required_datasets` list. Requires `PROSUITE_SPEC_PATH`.
+**`load_spec <path>`** — Loads a `.qa.xml` spec file. Call this at the start of a session with the path to your spec (local drive, OneDrive, network share). Replaces any previously loaded spec.
+
+**`search_spec <query> [max_results]`** — Searches the loaded `.qa.xml` spec for conditions matching a natural-language query (English, German, French, Italian). Returns up to `max_results` (default 20) matching conditions with pre-filled `condition_request` blocks ready to pass directly to `run_verification`, plus the `required_datasets` list. Requires a spec to be loaded first via `load_spec`.
 
 **`list_conditions [search]`** — Lists available quality conditions. Pass a keyword to filter by name or description.
 

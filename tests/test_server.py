@@ -1,5 +1,6 @@
 """Unit tests for MCP tools — all gRPC I/O is mocked."""
 
+import textwrap
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -16,8 +17,27 @@ from prosuite_mcp.server import (
     _summarize,
     describe_condition,
     list_conditions,
+    load_spec,
     run_verification,
 )
+
+_MINIMAL_XML = textwrap.dedent("""\
+    <?xml version="1.0" encoding="utf-8"?>
+    <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+      <Categories>
+        <Category name="Roads">
+          <QualityConditions>
+            <QualityCondition name="Roads: minimum length" testDescriptor="MinLength(0)" allowErrors="False">
+              <Parameters>
+                <Dataset parameter="featureClass" value="MY_ROADS" workspace="mydb" />
+                <Scalar parameter="limit" value="1.5" />
+              </Parameters>
+            </QualityCondition>
+          </QualityConditions>
+        </Category>
+      </Categories>
+    </DataQuality>
+""")
 
 # ---------------------------------------------------------------------------
 # list_conditions
@@ -65,6 +85,50 @@ def test_describe_condition_unknown_suggests_similar():
     result = describe_condition("qa3d_constant")
     # Should suggest similar names since "qa3d_constant" matches condition names
     assert "Similar names" in result or "Unknown condition" in result
+
+
+# ---------------------------------------------------------------------------
+# load_spec
+# ---------------------------------------------------------------------------
+
+
+def test_load_spec_file_not_found():
+    result = load_spec("/does/not/exist.qa.xml")
+    assert "error" in result
+    assert "not found" in result["error"].lower()
+
+
+def test_load_spec_success(tmp_path):
+    import prosuite_mcp.server as srv
+
+    spec_file = tmp_path / "test.qa.xml"
+    spec_file.write_text(_MINIMAL_XML, encoding="utf-8")
+
+    original = srv._spec_conditions
+    try:
+        result = load_spec(str(spec_file))
+        assert result["status"] == "ok"
+        assert result["conditions_loaded"] == 1
+        assert srv._spec_conditions is not None
+        assert len(srv._spec_conditions) == 1
+    finally:
+        srv._spec_conditions = original
+
+
+def test_load_spec_makes_search_work(tmp_path):
+    import prosuite_mcp.server as srv
+    from prosuite_mcp.server import search_spec as tool_search_spec
+
+    spec_file = tmp_path / "test.qa.xml"
+    spec_file.write_text(_MINIMAL_XML, encoding="utf-8")
+
+    original = srv._spec_conditions
+    try:
+        load_spec(str(spec_file))
+        result = tool_search_spec("minimum length")
+        assert result["total_matches"] == 1
+    finally:
+        srv._spec_conditions = original
 
 
 # ---------------------------------------------------------------------------

@@ -389,7 +389,10 @@ def test_describe_spec_no_spec_configured():
 def test_describe_spec_returns_metadata():
     fake_meta = {"specifications": [], "workspaces": []}
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.get_spec_metadata", return_value=fake_meta),
     ):
         result = describe_spec()
@@ -425,7 +428,10 @@ def test_run_xml_verification_success():
     final_spec = _mock_xml_verified_spec()
 
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
@@ -451,7 +457,10 @@ def test_run_xml_verification_grpc_error():
             return "service unavailable"
 
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", side_effect=_FakeRpcError()),
@@ -467,7 +476,10 @@ def test_run_xml_verification_grpc_error():
 
 def test_run_xml_verification_no_final_summary():
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 3}, None)),
@@ -485,7 +497,10 @@ def test_run_xml_verification_output_dir_in_result():
     final_spec = _mock_xml_verified_spec()
 
     with (
-        patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path="/tmp/x.qa.xml")),
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),

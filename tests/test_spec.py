@@ -378,19 +378,27 @@ def test_metadata_specification_names(metadata):
 
 
 def test_metadata_condition_count(metadata):
-    spec_a = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_A")
+    spec_a = next(
+        s for s in metadata["specifications"] if s["specification_name"] == "Spec_A"
+    )
     assert spec_a["condition_count"] == 1
-    spec_b = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_B")
+    spec_b = next(
+        s for s in metadata["specifications"] if s["specification_name"] == "Spec_B"
+    )
     assert spec_b["condition_count"] == 2
 
 
 def test_metadata_workspace_ids_per_spec(metadata):
-    spec_b = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_B")
+    spec_b = next(
+        s for s in metadata["specifications"] if s["specification_name"] == "Spec_B"
+    )
     assert sorted(spec_b["workspace_ids"]) == ["DATA_OSM", "DATA_REF"]
 
 
 def test_metadata_datasets_per_spec(metadata):
-    spec_b = next(s for s in metadata["specifications"] if s["specification_name"] == "Spec_B")
+    spec_b = next(
+        s for s in metadata["specifications"] if s["specification_name"] == "Spec_B"
+    )
     assert spec_b["datasets"] == ["BUILDINGS", "PARCELS", "ROADS"]
 
 

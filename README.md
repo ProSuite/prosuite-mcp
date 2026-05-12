@@ -16,6 +16,8 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 
 ## Usage
 
+Windows users: see [docs/windows-setup.md](docs/windows-setup.md) for a step-by-step guide including uv and Claude Code installation.
+
 Both options below assume you create a project directory first:
 
 ```bash

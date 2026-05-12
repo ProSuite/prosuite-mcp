@@ -21,7 +21,7 @@ Both options below assume you create a project directory first:
 ```bash
 mkdir mytest
 cd mytest
-uv init
+uv init --python 3.12
 uv add prosuite-mcp
 ```
 

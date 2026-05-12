@@ -8,6 +8,10 @@
     {
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": true
+    },
+    {
+      "matchDepNames": ["python"],
+      "enabled": false
     }
   ]
 }

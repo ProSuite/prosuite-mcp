@@ -3,7 +3,7 @@ name = "prosuite-mcp"
 dynamic = ["version"]
 description = "MCP server for Dira ProSuite quality verification"
 readme = "README.md"
-requires-python = ">=3.12, <3.14"
+requires-python = ">=3.14, <3.15"
 license = "MIT"
 authors = [
     { name = "Dira GeoSystems", email = "programmers@dirageosystems.ch" }

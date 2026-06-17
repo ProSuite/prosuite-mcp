@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "prosuite>=1.5.1",
-    "mcp[cli]==1.27.2",
+    "mcp[cli]==1.28.0",
     "pydantic==2.13.4",
 ]
 

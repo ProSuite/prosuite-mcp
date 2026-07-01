@@ -6,14 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import grpc
-import prosuite.generated.quality_verification_service_pb2_grpc as _qa_grpc
 from mcp.server.fastmcp import FastMCP
 from prosuite import EnvelopePerimeter, Service
 from prosuite.data_model import Dataset, Model
 from prosuite.factories.quality_conditions import Conditions
 from prosuite.quality import Specification, XmlSpecification
 from prosuite.verification import VerifiedSpecification
-from prosuite.verification.advanced_parameters import AdvancedParameters
 from pydantic import BaseModel
 
 from .catalog import CATALOG, ParamInfo
@@ -253,49 +251,33 @@ def _build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
     return method(**kwargs)
 
 
-def _run_stream(
+def _run_verify(
     service: Service,
     spec: Specification | XmlSpecification,
-    output_dir: str | None,
+    output_dir: str,
     perimeter,
-) -> tuple[dict[int, int], VerifiedSpecification | None]:
-    """Iterate the raw gRPC stream to capture per-condition issue counts.
-
-    The prosuite Issue wrapper strips condition_id, so we must read it here
-    from the raw protobuf before it is lost.
-    """
-    params = AdvancedParameters(spec, output_dir or "", perimeter)
-    channel = service._create_channel()
-    client = _qa_grpc.QualityVerificationGrpcStub(channel)
-    request = service._compile_request(params)
-
-    issues_by_condition: dict[int, int] = {}
+) -> tuple[int, VerifiedSpecification | None]:
+    """Run the verification stream, returning (issues_seen, final spec)."""
+    issues_seen = 0
     verified_spec = None
-
-    for response_msg in client.VerifyQuality(request):
-        for issue_msg in response_msg.issues:
-            cid = issue_msg.condition_id
-            issues_by_condition[cid] = issues_by_condition.get(cid, 0) + 1
-        if response_msg.service_call_status == 3:
-            verified_spec = service._parse_verified_specification(response_msg, {})
-
-    return issues_by_condition, verified_spec
+    for response in service.verify(spec, perimeter=perimeter, output_dir=output_dir):
+        issues_seen += len(response.issues)
+        if response.verified_specification is not None:
+            verified_spec = response.verified_specification
+    return issues_seen, verified_spec
 
 
-def _summarize(
-    spec: VerifiedSpecification, issues_by_condition: dict[int, int]
-) -> dict[str, Any]:
+def _summarize(spec: VerifiedSpecification, issues_seen: int) -> dict[str, Any]:
     return {
         "specification_name": spec.specification_name,
         "user_name": spec.user_name,
         "total_conditions": spec.verified_conditions_count,
-        "total_errors": sum(issues_by_condition.values()),
+        "total_errors": sum(c.error_count for c in spec.verified_conditions),
+        "issues_seen_in_stream": issues_seen,
         "conditions": [
             {
                 "name": c.name or f"condition_{c.condition_id}",
-                "errors": issues_by_condition.get(c.condition_id, 0)
-                if c.condition_id is not None
-                else 0,
+                "errors": c.error_count,
             }
             for c in spec.verified_conditions
         ],
@@ -369,9 +351,7 @@ def run_verification(
     service = _make_service()
 
     try:
-        issues_by_condition, verified_spec = _run_stream(
-            service, spec, output_dir, perimeter
-        )
+        issues_seen, verified_spec = _run_verify(service, spec, output_dir, perimeter)
     except grpc.RpcError as exc:
         return {
             "status": "error",
@@ -382,10 +362,10 @@ def run_verification(
         return {
             "status": "error",
             "error": "Verification stream ended without a final summary.",
-            "total_errors": sum(issues_by_condition.values()),
+            "issues_seen_in_stream": issues_seen,
         }
 
-    summary = _summarize(verified_spec, issues_by_condition)
+    summary = _summarize(verified_spec, issues_seen)
     summary["status"] = "success"
     summary["output_dir"] = output_dir
     return summary
@@ -451,7 +431,7 @@ def run_xml_verification(
     service = _make_service()
 
     try:
-        issues_by_condition, verified_spec = _run_stream(
+        issues_seen, verified_spec = _run_verify(
             service, xml_spec, output_dir, perimeter
         )
     except grpc.RpcError as exc:
@@ -461,10 +441,10 @@ def run_xml_verification(
         return {
             "status": "error",
             "error": "Verification stream ended without a final summary.",
-            "total_errors": sum(issues_by_condition.values()),
+            "issues_seen_in_stream": issues_seen,
         }
 
-    summary = _summarize(verified_spec, issues_by_condition)
+    summary = _summarize(verified_spec, issues_seen)
     summary["status"] = "success"
     summary["output_dir"] = output_dir
     return summary

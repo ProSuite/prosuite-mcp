@@ -239,13 +239,14 @@ def test_summarize():
         specification_name="Test Spec",
         user_name="alice",
         verified_conditions=[
-            VerifiedCondition(condition_id=1, name="cond_a", error_count=0),
+            VerifiedCondition(condition_id=1, name="cond_a", error_count=3),
             VerifiedCondition(condition_id=2, name="cond_b", error_count=0),
         ],
     )
-    result = _summarize(spec, issues_by_condition={1: 3})
+    result = _summarize(spec, issues_seen=3)
     assert result["total_errors"] == 3
     assert result["total_conditions"] == 2
+    assert result["issues_seen_in_stream"] == 3
     assert result["conditions"][0]["name"] == "cond_a"
     assert result["conditions"][0]["errors"] == 3
     assert result["conditions"][1]["errors"] == 0
@@ -273,10 +274,10 @@ def test_run_verification_success(tmp_path):
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream") as mock_stream,
+        patch("prosuite_mcp.server._run_verify") as mock_stream,
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
-        mock_stream.return_value = ({1: 2}, final_spec)
+        mock_stream.return_value = (2, final_spec)
         mock_path.cwd.return_value = tmp_path
 
         result = run_verification(
@@ -309,7 +310,7 @@ def test_run_verification_grpc_error(tmp_path):
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream") as mock_stream,
+        patch("prosuite_mcp.server._run_verify") as mock_stream,
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_stream.side_effect = _FakeRpcError()
@@ -352,9 +353,9 @@ def test_run_verification_with_output_dir():
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream") as mock_stream,
+        patch("prosuite_mcp.server._run_verify") as mock_stream,
     ):
-        mock_stream.return_value = ({1: 0}, final_spec)
+        mock_stream.return_value = (0, final_spec)
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",
@@ -439,7 +440,7 @@ def test_run_xml_verification_success(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -470,7 +471,7 @@ def test_run_xml_verification_grpc_error(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", side_effect=_FakeRpcError()),
+        patch("prosuite_mcp.server._run_verify", side_effect=_FakeRpcError()),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -491,7 +492,7 @@ def test_run_xml_verification_no_final_summary(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({10: 3}, None)),
+        patch("prosuite_mcp.server._run_verify", return_value=(3, None)),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -501,7 +502,7 @@ def test_run_xml_verification_no_final_summary(tmp_path):
         )
 
     assert result["status"] == "error"
-    assert result["total_errors"] == 3
+    assert result["issues_seen_in_stream"] == 3
 
 
 def test_run_xml_verification_output_dir_in_result():
@@ -514,7 +515,7 @@ def test_run_xml_verification_output_dir_in_result():
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
     ):
         result = run_xml_verification(
             specification_name="Spec_A",
@@ -568,7 +569,7 @@ def test_run_xml_verification_auto_creates_output_dir(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -591,7 +592,7 @@ def test_run_xml_verification_explicit_output_dir_not_overridden(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({10: 0}, final_spec)),
+        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
     ):
         result = run_xml_verification(
             specification_name="Spec_A",
@@ -612,7 +613,7 @@ def test_run_verification_auto_creates_output_dir(tmp_path):
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({1: 2}, final_spec)),
+        patch("prosuite_mcp.server._run_verify", return_value=(2, final_spec)),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -637,7 +638,7 @@ def test_run_verification_explicit_output_dir_not_overridden(tmp_path):
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_stream", return_value=({1: 0}, final_spec)),
+        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
     ):
         result = run_verification(
             model_catalog_path="C:/test.gdb",

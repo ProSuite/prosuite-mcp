@@ -306,6 +306,172 @@ def test_run_verify_aggregates_stream_without_retaining_all_issues():
 
 
 # ---------------------------------------------------------------------------
+# condition_to_xml (spec authoring / emission)
+# ---------------------------------------------------------------------------
+
+
+def test_condition_to_xml_round_trips_dataset_and_scalar_params():
+    import xml.etree.ElementTree as ET
+
+    from prosuite_mcp.server import condition_to_xml
+    from prosuite_mcp.spec import _NS, _get_list_params, _parse_condition
+
+    xml = condition_to_xml(
+        name="lines: minimum length",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 1.5},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+        test_descriptor="MinLength(1)",
+        allow_errors=False,
+    )
+
+    el = ET.fromstring(xml)
+    parsed = _parse_condition(el, "", _get_list_params())
+
+    assert parsed.name == "lines: minimum length"
+    assert parsed.method == "qa_min_length_1"
+    assert parsed.allow_errors is False
+    assert parsed.dataset_params[0].py_name == "feature_class"
+    assert parsed.dataset_params[0].dataset_name == "lines"
+    assert {s.py_name: s.value for s in parsed.scalar_params}["limit"] == "1.5"
+    # workspace binding is emitted on the Dataset element
+    ds_el = el.find(".//qa:Dataset", _NS)
+    assert ds_el is not None and ds_el.get("workspace") == "DATA_OSM"
+
+
+def test_condition_to_xml_round_trips_per_condition_where_filter():
+    import xml.etree.ElementTree as ET
+
+    from prosuite_mcp.server import condition_to_xml
+    from prosuite_mcp.spec import _get_list_params, _parse_condition
+
+    xml = condition_to_xml(
+        name="natur subtype 0: minimum length",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "Natur", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="Natur", filter_expression="subtype=0")],
+        workspace_id="DATA_OSM",
+        test_descriptor="MinLength(1)",
+    )
+
+    parsed = _parse_condition(ET.fromstring(xml), "", _get_list_params())
+    assert parsed.dataset_params[0].filter_expression == "subtype=0"
+
+
+def test_condition_to_xml_round_trips_list_dataset_params():
+    import xml.etree.ElementTree as ET
+
+    from prosuite_mcp.server import condition_to_xml
+    from prosuite_mcp.spec import _get_list_params, _parse_condition
+
+    xml = condition_to_xml(
+        name="border sense over two classes",
+        condition_request=ConditionRequest(
+            condition="qa_border_sense_1",
+            params={"polyline_classes": ["Eisenbahn", "Strassen"], "clockwise": True},
+        ),
+        datasets=[DatasetRef(name="Eisenbahn"), DatasetRef(name="Strassen")],
+        workspace_id="DATA_OSM",
+        test_descriptor="BorderSense(1)",
+    )
+
+    parsed = _parse_condition(ET.fromstring(xml), "", _get_list_params())
+    list_params = [
+        dp for dp in parsed.dataset_params if dp.py_name == "polyline_classes"
+    ]
+    assert len(list_params) == 2
+    assert {dp.dataset_name for dp in list_params} == {"Eisenbahn", "Strassen"}
+    assert all(dp.is_list for dp in list_params)
+    assert {s.py_name: s.value for s in parsed.scalar_params}["clockwise"] == "True"
+
+
+_SPEC_FOR_AUTHORING = textwrap.dedent("""\
+    <?xml version="1.0" encoding="utf-8"?>
+    <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+      <QualitySpecifications>
+        <QualitySpecification name="MySpec">
+          <Elements>
+            <Element qualityCondition="Existing_Cond" />
+          </Elements>
+        </QualitySpecification>
+      </QualitySpecifications>
+      <QualityConditions>
+        <QualityCondition name="Existing_Cond" testDescriptor="MinLength(1)">
+          <Parameters>
+            <Dataset parameter="featureClass" value="Roads" workspace="DATA_OSM" />
+            <Scalar parameter="limit" value="5" />
+          </Parameters>
+        </QualityCondition>
+      </QualityConditions>
+      <TestDescriptors>
+        <TestDescriptor name="MinLength(1)">
+          <TestClass type="EsriDE.ProSuite.QA.Tests.QaMinLength" assembly="EsriDE.ProSuite.QA.Tests" constructorIndex="1" />
+        </TestDescriptor>
+      </TestDescriptors>
+      <Workspaces>
+        <Workspace id="DATA_OSM" modelName="osm" />
+      </Workspaces>
+    </DataQuality>
+""")
+
+
+def test_add_condition_to_spec_reuses_descriptor_and_wires_element(tmp_path):
+    from prosuite_mcp.server import add_condition_to_spec
+    from prosuite_mcp.spec import get_spec_metadata
+    from prosuite_mcp.spec import load_spec as parse_spec
+
+    updated = add_condition_to_spec(
+        spec_xml=_SPEC_FOR_AUTHORING,
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+    )
+
+    out = tmp_path / "updated.qa.xml"
+    out.write_text(updated, encoding="utf-8")
+
+    # New condition parses, reusing the spec's existing descriptor alias
+    conditions = {c.name: c for c in parse_spec(str(out))}
+    assert "lines minlen" in conditions
+    assert conditions["lines minlen"].method == "qa_min_length_1"
+
+    # And it is wired into the target specification
+    meta = get_spec_metadata(str(out))
+    myspec = next(
+        s for s in meta["specifications"] if s["specification_name"] == "MySpec"
+    )
+    assert myspec["condition_count"] == 2
+    assert "lines" in myspec["datasets"]
+
+
+def test_add_condition_to_spec_rejects_missing_descriptor():
+    from prosuite_mcp.server import add_condition_to_spec
+
+    with pytest.raises(ValueError, match="descriptor"):
+        add_condition_to_spec(
+            spec_xml=_SPEC_FOR_AUTHORING,
+            target_specification_name="MySpec",
+            name="simple geom",
+            condition_request=ConditionRequest(
+                condition="qa_simple_geometry_0",
+                params={"feature_class": "lines"},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )
+
+
+# ---------------------------------------------------------------------------
 # _summarize
 # ---------------------------------------------------------------------------
 

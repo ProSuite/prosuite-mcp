@@ -12,6 +12,7 @@ from prosuite_mcp.catalog import CATALOG
 from prosuite_mcp.server import (
     ConditionRequest,
     DatasetRef,
+    StreamOutcome,
     _build_condition,
     _make_run_dir,
     _resolve_param,
@@ -230,6 +231,81 @@ def test_build_condition_success():
 
 
 # ---------------------------------------------------------------------------
+# _decode_issue
+# ---------------------------------------------------------------------------
+
+
+def test_decode_issue_maps_core_fields():
+    from types import SimpleNamespace
+
+    from prosuite_mcp.server import _decode_issue
+
+    issue = SimpleNamespace(
+        issue_code="MinimumLength.LengthTooSmall",
+        description="Length 341.96 < 1,000,000.00",
+        allowable=False,
+        involved_objects=[
+            SimpleNamespace(table_name="lines", object_ids=[1]),
+        ],
+    )
+
+    assert _decode_issue(issue) == {
+        "issue_code": "MinimumLength.LengthTooSmall",
+        "description": "Length 341.96 < 1,000,000.00",
+        "allowable": False,
+        "involved": [{"table_name": "lines", "object_ids": [1]}],
+    }
+
+
+# ---------------------------------------------------------------------------
+# _run_verify (stream aggregation)
+# ---------------------------------------------------------------------------
+
+
+def _fake_issue(code: str, table: str, allowable: bool):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        issue_code=code,
+        description="d",
+        allowable=allowable,
+        involved_objects=[SimpleNamespace(table_name=table, object_ids=[1])],
+    )
+
+
+def test_run_verify_aggregates_stream_without_retaining_all_issues():
+    from types import SimpleNamespace
+
+    from prosuite_mcp.server import _run_verify
+
+    responses = [
+        SimpleNamespace(
+            issues=[
+                _fake_issue("A", "lines", allowable=False),
+                _fake_issue("A", "lines", allowable=False),
+            ],
+            verified_specification=None,
+        ),
+        SimpleNamespace(
+            issues=[_fake_issue("B", "points", allowable=True)],
+            verified_specification="SPEC",
+        ),
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, verified = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert verified == "SPEC"
+    assert outcome.total == 3
+    assert outcome.errors == 2  # allowable is False
+    assert outcome.warnings == 1  # allowable is True
+    assert outcome.counts_by_code == {"A": 2, "B": 1}
+    assert outcome.counts_by_table == {"lines": 2, "points": 1}
+    assert len(outcome.sample) == 3
+    assert outcome.sample[0]["issue_code"] == "A"
+
+
+# ---------------------------------------------------------------------------
 # _summarize
 # ---------------------------------------------------------------------------
 
@@ -243,8 +319,11 @@ def test_summarize():
             VerifiedCondition(condition_id=2, name="cond_b", error_count=0),
         ],
     )
-    result = _summarize(spec, issues_seen=3)
+    # total_errors/total_warnings come from the stream; the per-condition
+    # breakdown still comes from verified_conditions (populated on the XML path).
+    result = _summarize(spec, StreamOutcome(total=3, errors=3, warnings=0))
     assert result["total_errors"] == 3
+    assert result["total_warnings"] == 0
     assert result["total_conditions"] == 2
     assert result["issues_seen_in_stream"] == 3
     assert result["conditions"][0]["name"] == "cond_a"
@@ -277,7 +356,7 @@ def test_run_verification_success(tmp_path):
         patch("prosuite_mcp.server._run_verify") as mock_stream,
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
-        mock_stream.return_value = (2, final_spec)
+        mock_stream.return_value = (StreamOutcome(total=2, errors=2), final_spec)
         mock_path.cwd.return_value = tmp_path
 
         result = run_verification(
@@ -296,6 +375,131 @@ def test_run_verification_success(tmp_path):
     assert result["total_errors"] == 2
     assert result["total_conditions"] == 1
     assert result["conditions"][0]["errors"] == 2
+
+
+def test_run_verification_total_errors_from_stream_when_conditions_empty(tmp_path):
+    # Ad-hoc runs come back with empty/nameless verified_conditions, so the old
+    # sum-of-error_count reported 0 even when the stream carried real issues.
+    empty_spec = VerifiedSpecification(
+        specification_name="prosuite-mcp verification",
+        user_name="",
+        verified_conditions=[],
+    )
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(total=5, errors=4, warnings=1), empty_spec),
+        ),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_verification(
+            model_catalog_path="C:/test.gdb",
+            model_name="TestModel",
+            datasets=[DatasetRef(name="Roads")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa3d_constant_z_0",
+                    params={"feature_class": "Roads", "tolerance": 0.01},
+                )
+            ],
+        )
+
+    assert result["total_errors"] == 4
+    assert result["total_warnings"] == 1
+    assert result["issues_seen_in_stream"] == 5
+
+
+def test_run_verification_exposes_sample_and_counts(tmp_path):
+    spec = _mock_verified_spec()
+    sample = [
+        {"issue_code": "A", "description": "d", "allowable": False, "involved": []},
+    ]
+    outcome = StreamOutcome(
+        total=3,
+        errors=2,
+        warnings=1,
+        counts_by_code={"A": 2, "B": 1},
+        counts_by_table={"lines": 3},
+        sample=sample,
+    )
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_verify", return_value=(outcome, spec)),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_verification(
+            model_catalog_path="C:/test.gdb",
+            model_name="TestModel",
+            datasets=[DatasetRef(name="Roads")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa3d_constant_z_0",
+                    params={"feature_class": "Roads", "tolerance": 0.01},
+                )
+            ],
+        )
+
+    assert result["issue_counts_by_code"] == {"A": 2, "B": 1}
+    assert result["issue_counts_by_table"] == {"lines": 3}
+    assert result["sample_features"] == sample
+
+
+def test_run_verification_engine_confirmed_true_on_success(tmp_path):
+    spec = _mock_verified_spec()
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(total=1, errors=1), spec),
+        ),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_verification(
+            model_catalog_path="C:/test.gdb",
+            model_name="TestModel",
+            datasets=[DatasetRef(name="Roads")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa3d_constant_z_0",
+                    params={"feature_class": "Roads", "tolerance": 0.01},
+                )
+            ],
+        )
+
+    assert result["engine_confirmed"] is True
+
+
+def test_run_verification_engine_confirmed_false_without_final_summary(tmp_path):
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(total=3), None),
+        ),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_verification(
+            model_catalog_path="C:/test.gdb",
+            model_name="TestModel",
+            datasets=[DatasetRef(name="Roads")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa3d_constant_z_0",
+                    params={"feature_class": "Roads", "tolerance": 0.01},
+                )
+            ],
+        )
+
+    assert result["status"] == "error"
+    assert result["engine_confirmed"] is False
 
 
 def test_run_verification_grpc_error(tmp_path):
@@ -355,7 +559,7 @@ def test_run_verification_with_output_dir():
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_verify") as mock_stream,
     ):
-        mock_stream.return_value = (0, final_spec)
+        mock_stream.return_value = (StreamOutcome(), final_spec)
 
         result = run_verification(
             model_catalog_path="C:/test.gdb",
@@ -440,7 +644,10 @@ def test_run_xml_verification_success(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), final_spec),
+        ),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -492,7 +699,10 @@ def test_run_xml_verification_no_final_summary(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(3, None)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(total=3), None),
+        ),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -515,7 +725,10 @@ def test_run_xml_verification_output_dir_in_result():
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), final_spec),
+        ),
     ):
         result = run_xml_verification(
             specification_name="Spec_A",
@@ -569,7 +782,10 @@ def test_run_xml_verification_auto_creates_output_dir(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), final_spec),
+        ),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -592,7 +808,10 @@ def test_run_xml_verification_explicit_output_dir_not_overridden(tmp_path):
         ),
         patch("prosuite_mcp.server.XmlSpecification"),
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), final_spec),
+        ),
     ):
         result = run_xml_verification(
             specification_name="Spec_A",
@@ -613,7 +832,10 @@ def test_run_verification_auto_creates_output_dir(tmp_path):
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(2, final_spec)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(total=2, errors=2), final_spec),
+        ),
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
         mock_path.cwd.return_value = tmp_path
@@ -638,7 +860,10 @@ def test_run_verification_explicit_output_dir_not_overridden(tmp_path):
 
     with (
         patch("prosuite_mcp.server._make_service"),
-        patch("prosuite_mcp.server._run_verify", return_value=(0, final_spec)),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), final_spec),
+        ),
     ):
         result = run_verification(
             model_catalog_path="C:/test.gdb",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -251,29 +252,83 @@ def _build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
     return method(**kwargs)
 
 
+def _decode_issue(issue: Any) -> dict[str, Any]:
+    """Decode a streamed issue object into a plain, JSON-serializable dict."""
+    return {
+        "issue_code": issue.issue_code,
+        "description": issue.description,
+        "allowable": issue.allowable,
+        "involved": [
+            {"table_name": t.table_name, "object_ids": list(t.object_ids)}
+            for t in issue.involved_objects
+        ],
+    }
+
+
+_SAMPLE_CAP = 10
+
+
+@dataclass
+class StreamOutcome:
+    """Bounded aggregate of a verification issue stream.
+
+    Memory is O(distinct codes + distinct tables + sample cap), independent of
+    the number of issues, so large runs (100k+ issues) do not blow up memory.
+    The authoritative full record stays in the server-side Issues.gdb.
+    """
+
+    total: int = 0
+    errors: int = 0  # issue.allowable is False (hard errors)
+    warnings: int = 0  # issue.allowable is True (allowed / soft)
+    counts_by_code: dict[str, int] = field(default_factory=dict)
+    counts_by_table: dict[str, int] = field(default_factory=dict)
+    sample: list[dict[str, Any]] = field(default_factory=list)
+
+
 def _run_verify(
     service: Service,
     spec: Specification | XmlSpecification,
     output_dir: str,
     perimeter,
-) -> tuple[int, VerifiedSpecification | None]:
-    """Run the verification stream, returning (issues_seen, final spec)."""
-    issues_seen = 0
+) -> tuple[StreamOutcome, VerifiedSpecification | None]:
+    """Consume the verification stream once, aggregating into a StreamOutcome.
+
+    Returns (outcome, final verified spec). Individual issues are tallied and
+    dropped; only a bounded sample is retained.
+    """
+    outcome = StreamOutcome()
     verified_spec = None
     for response in service.verify(spec, perimeter=perimeter, output_dir=output_dir):
-        issues_seen += len(response.issues)
+        for issue in response.issues:
+            outcome.total += 1
+            if issue.allowable:
+                outcome.warnings += 1
+            else:
+                outcome.errors += 1
+            code = issue.issue_code
+            outcome.counts_by_code[code] = outcome.counts_by_code.get(code, 0) + 1
+            for t in issue.involved_objects:
+                name = t.table_name
+                outcome.counts_by_table[name] = outcome.counts_by_table.get(name, 0) + 1
+            if len(outcome.sample) < _SAMPLE_CAP:
+                outcome.sample.append(_decode_issue(issue))
         if response.verified_specification is not None:
             verified_spec = response.verified_specification
-    return issues_seen, verified_spec
+    return outcome, verified_spec
 
 
-def _summarize(spec: VerifiedSpecification, issues_seen: int) -> dict[str, Any]:
+def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str, Any]:
     return {
+        "engine_confirmed": True,
         "specification_name": spec.specification_name,
         "user_name": spec.user_name,
         "total_conditions": spec.verified_conditions_count,
-        "total_errors": sum(c.error_count for c in spec.verified_conditions),
-        "issues_seen_in_stream": issues_seen,
+        "total_errors": outcome.errors,
+        "total_warnings": outcome.warnings,
+        "issues_seen_in_stream": outcome.total,
+        "issue_counts_by_code": outcome.counts_by_code,
+        "issue_counts_by_table": outcome.counts_by_table,
+        "sample_features": outcome.sample,
         "conditions": [
             {
                 "name": c.name or f"condition_{c.condition_id}",
@@ -351,7 +406,7 @@ def run_verification(
     service = _make_service()
 
     try:
-        issues_seen, verified_spec = _run_verify(service, spec, output_dir, perimeter)
+        outcome, verified_spec = _run_verify(service, spec, output_dir, perimeter)
     except grpc.RpcError as exc:
         return {
             "status": "error",
@@ -361,11 +416,12 @@ def run_verification(
     if verified_spec is None:
         return {
             "status": "error",
+            "engine_confirmed": False,
             "error": "Verification stream ended without a final summary.",
-            "issues_seen_in_stream": issues_seen,
+            "issues_seen_in_stream": outcome.total,
         }
 
-    summary = _summarize(verified_spec, issues_seen)
+    summary = _summarize(verified_spec, outcome)
     summary["status"] = "success"
     summary["output_dir"] = output_dir
     return summary
@@ -431,20 +487,19 @@ def run_xml_verification(
     service = _make_service()
 
     try:
-        issues_seen, verified_spec = _run_verify(
-            service, xml_spec, output_dir, perimeter
-        )
+        outcome, verified_spec = _run_verify(service, xml_spec, output_dir, perimeter)
     except grpc.RpcError as exc:
         return {"status": "error", "error": f"gRPC {exc.code()}: {exc.details()}"}
 
     if verified_spec is None:
         return {
             "status": "error",
+            "engine_confirmed": False,
             "error": "Verification stream ended without a final summary.",
-            "issues_seen_in_stream": issues_seen,
+            "issues_seen_in_stream": outcome.total,
         }
 
-    summary = _summarize(verified_spec, issues_seen)
+    summary = _summarize(verified_spec, outcome)
     summary["status"] = "success"
     summary["output_dir"] = output_dir
     return summary

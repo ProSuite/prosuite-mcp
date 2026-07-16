@@ -318,7 +318,7 @@ def test_condition_to_xml_round_trips_dataset_and_scalar_params():
     import xml.etree.ElementTree as ET
 
     from prosuite_mcp.server import condition_to_xml
-    from prosuite_mcp.spec import _NS, _get_list_params, _parse_condition
+    from prosuite_mcp.spec import _NS, _parse_condition
 
     xml = condition_to_xml(
         name="lines: minimum length",
@@ -333,7 +333,7 @@ def test_condition_to_xml_round_trips_dataset_and_scalar_params():
     )
 
     el = ET.fromstring(xml)
-    parsed = _parse_condition(el, "", _get_list_params())
+    parsed = _parse_condition(el, "")
 
     assert parsed.name == "lines: minimum length"
     assert parsed.method == "qa_min_length_1"
@@ -350,7 +350,7 @@ def test_condition_to_xml_round_trips_per_condition_where_filter():
     import xml.etree.ElementTree as ET
 
     from prosuite_mcp.server import condition_to_xml
-    from prosuite_mcp.spec import _get_list_params, _parse_condition
+    from prosuite_mcp.spec import _parse_condition
 
     xml = condition_to_xml(
         name="natur subtype 0: minimum length",
@@ -363,7 +363,7 @@ def test_condition_to_xml_round_trips_per_condition_where_filter():
         test_descriptor="MinLength(1)",
     )
 
-    parsed = _parse_condition(ET.fromstring(xml), "", _get_list_params())
+    parsed = _parse_condition(ET.fromstring(xml), "")
     assert parsed.dataset_params[0].filter_expression == "subtype=0"
 
 
@@ -371,7 +371,7 @@ def test_condition_to_xml_round_trips_list_dataset_params():
     import xml.etree.ElementTree as ET
 
     from prosuite_mcp.server import condition_to_xml
-    from prosuite_mcp.spec import _get_list_params, _parse_condition
+    from prosuite_mcp.spec import _parse_condition
 
     xml = condition_to_xml(
         name="border sense over two classes",
@@ -384,7 +384,7 @@ def test_condition_to_xml_round_trips_list_dataset_params():
         test_descriptor="BorderSense(1)",
     )
 
-    parsed = _parse_condition(ET.fromstring(xml), "", _get_list_params())
+    parsed = _parse_condition(ET.fromstring(xml), "")
     list_params = [
         dp for dp in parsed.dataset_params if dp.py_name == "polyline_classes"
     ]

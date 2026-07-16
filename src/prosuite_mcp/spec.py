@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import importlib.util
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from pathlib import Path
+
+from .catalog import CATALOG
 
 _NS = {"qa": "urn:ProSuite.QA.QualitySpecifications-3.0"}
 
@@ -53,44 +53,17 @@ def _descriptor_to_method(descriptor: str) -> str | None:
     return f"qa_{snake}_{version}" if version is not None else f"qa_{snake}"
 
 
-def _load_list_params() -> dict[str, set[str]]:
-    """Return {method_name: {snake_case param names that are List[BaseDataset]}}."""
-    spec = importlib.util.find_spec("prosuite")
-    if not spec or not spec.submodule_search_locations:
-        return {}
-    qc_path = (
-        Path(list(spec.submodule_search_locations)[0])
-        / "factories"
-        / "quality_conditions.py"
-    )
-    if not qc_path.exists():
-        return {}
+def _is_list_dataset_param(method: str, py_name: str) -> bool:
+    """Whether py_name is a List[BaseDataset] parameter of method, per CATALOG.
 
-    src = qc_path.read_text(encoding="utf-8")
-    result: dict[str, set[str]] = {}
-    sig_re = re.compile(r"def (qa_\w+)\(cls,([^)]+)\)")
-    param_re = re.compile(r"(\w+)\s*:\s*([\w\[\], ]+?)(?:,|\Z)")
-
-    for m in sig_re.finditer(src):
-        method_name = m.group(1)
-        list_params: set[str] = set()
-        for pm in param_re.finditer(m.group(2)):
-            pname, ptype = pm.group(1).strip(), pm.group(2)
-            if "List" in ptype and "BaseDataset" in ptype:
-                list_params.add(_to_snake(pname))
-        result[method_name] = list_params
-
-    return result
-
-
-_LIST_PARAMS: dict[str, set[str]] | None = None
-
-
-def _get_list_params() -> dict[str, set[str]]:
-    global _LIST_PARAMS
-    if _LIST_PARAMS is None:
-        _LIST_PARAMS = _load_list_params()
-    return _LIST_PARAMS
+    CATALOG is built once at import time from the prosuite factory's own type
+    annotations (see catalog.py), so this reuses that classification instead
+    of re-deriving it by re-parsing the factory's source file.
+    """
+    info = CATALOG.get(method)
+    if info is None:
+        return False
+    return any(p.name == py_name and p.is_dataset_list for p in info.params)
 
 
 def _walk_conditions(
@@ -111,7 +84,6 @@ def _walk_conditions(
 def _parse_condition(
     cond_el: ET.Element,
     category: str,
-    list_params: dict[str, set[str]],
 ) -> SpecCondition:
     name = cond_el.get("name", "")
     descriptor = cond_el.get("testDescriptor", "")
@@ -139,8 +111,8 @@ def _parse_condition(
                     break
                 value = p.get("value", "")
                 if value:
-                    is_list = py_pname in (
-                        list_params.get(method, set()) if method else set()
+                    is_list = method is not None and _is_list_dataset_param(
+                        method, py_pname
                     )
                     dataset_params.append(
                         DatasetParam(
@@ -187,8 +159,7 @@ def load_spec(path: str) -> list[SpecCondition]:
     root = tree.getroot()
     pairs: list[tuple[ET.Element, str]] = []
     _walk_conditions(root, [], pairs)
-    list_params = _get_list_params()
-    return [_parse_condition(el, cat, list_params) for el, cat in pairs]
+    return [_parse_condition(el, cat) for el, cat in pairs]
 
 
 def get_spec_metadata(path: str) -> dict:

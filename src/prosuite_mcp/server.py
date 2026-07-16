@@ -315,36 +315,25 @@ def condition_to_xml(
     allow_errors: bool = False,
     description: str = "",
 ) -> str:
-    """Preview a single ProSuite <QualityCondition> element, without touching a spec.
+    """Preview a single ProSuite <QualityCondition> XML element, without touching a spec.
 
-    Serializes condition_request into the XML ProSuite would store for it. The
-    condition is built through the authoritative prosuite factory (the same
-    path run_verification uses), so parameter XML names, dataset/scalar
-    classification, and value formatting come from the engine's own model
-    rather than guesswork. Pure preview: returns a string, never writes
-    anywhere or mutates a spec.
-
-    test_descriptor must be the name of a <TestDescriptor> that already
-    exists in the target spec (e.g. "MinLength(1)") — this tool does not look
-    one up for you. Use add_condition_to_spec instead if you want the
-    descriptor resolved automatically and the condition wired into a real
-    QualitySpecification.
+    Builds the condition through the same prosuite factory as run_verification,
+    so parameter names and value formatting are engine-derived, not guessed.
+    Returns a string; never writes anywhere. test_descriptor must already
+    exist in the target spec (e.g. "MinLength(1)") — use add_condition_to_spec
+    if you want it resolved automatically and wired into a real specification.
 
     Args:
-        name: Human-readable condition name, e.g. "lines: minimum length".
-        condition_request: {condition: method name from list_conditions,
-            params: dict of parameter name -> value}.
-        datasets: Feature classes/tables referenced by condition_request's
-            dataset parameters. Each entry has a 'name' and an optional
-            'filter_expression' (per-condition WHERE clause).
-        workspace_id: Logical workspace id to bind dataset parameters to
-            (e.g. "DATA_OSM"); must match a <Workspace> id in the target spec.
-        test_descriptor: Existing <TestDescriptor> name/alias to reference.
-        allow_errors: Whether issues from this condition are tolerated
-            (allowErrors="true") or hard failures.
-        description: Optional human-readable description element.
+        name: Human-readable condition name.
+        condition_request: {condition: method name from list_conditions, params: dict}.
+        datasets: Feature classes/tables used by condition_request, each with
+            'name' and an optional 'filter_expression'.
+        workspace_id: Logical workspace id to bind datasets to (e.g. "DATA_OSM").
+        test_descriptor: Existing <TestDescriptor> name to reference.
+        allow_errors: Whether issues from this condition are tolerated.
+        description: Optional description element.
 
-    Returns the <QualityCondition> XML fragment as a string.
+    Returns the <QualityCondition> XML fragment.
     """
     dataset_map = {
         ds.name: Dataset(
@@ -397,43 +386,25 @@ def add_condition_to_spec(
 ) -> str:
     """Preview adding a new QualityCondition to a spec, reusing an existing descriptor.
 
-    Builds the condition through the authoritative prosuite factory (the same
-    path run_verification uses), resolves an existing <TestDescriptor> whose
-    test class matches (never synthesizes one), and returns the full updated
-    spec XML with the new <QualityCondition> appended and wired into
-    target_specification_name's <Elements>.
-
-    This is preview-only: it returns a string and never writes to any file, so
-    the result should be reviewed before being persisted. Call describe_spec
-    first to find valid specification_name/workspace_id/dataset values.
-
-    Raises ValueError if: name already names a <QualityCondition> in the spec
-    (prevents duplicate entries from an accidental repeat call), no
-    <TestDescriptor> matches the condition's test class (reuse-existing only),
-    or target_specification_name is not found in the spec.
+    Builds the condition through the same prosuite factory as run_verification,
+    resolves a matching <TestDescriptor> (never synthesizes one), and returns
+    the full updated spec XML with the condition appended and wired into
+    target_specification_name. Preview only — never writes to a file. Call
+    describe_spec first for valid specification/workspace/dataset names.
 
     Args:
-        target_specification_name: Name of the QualitySpecification to wire
-            the new condition into (from describe_spec).
-        name: Human-readable condition name, e.g. "lines: minimum length".
-            Must not already exist in the spec.
-        condition_request: {condition: method name from list_conditions,
-            params: dict of parameter name -> value}.
-        datasets: Feature classes/tables referenced by condition_request's
-            dataset parameters. Each entry has a 'name' and an optional
-            'filter_expression' (per-condition WHERE clause).
-        workspace_id: Logical workspace id to bind dataset parameters to
-            (e.g. "DATA_OSM"); must match a <Workspace> id in the spec.
-        allow_errors: Whether issues from this condition are tolerated
-            (allowErrors="true") or hard failures.
-        description: Optional human-readable description element.
-        spec_xml: The spec's XML text. If omitted, reads the file at the
-            currently configured/loaded spec path (see load_spec /
-            PROSUITE_SPEC_PATH) instead of requiring the full spec text as
-            a call argument.
+        target_specification_name: QualitySpecification to wire the condition into.
+        name: Human-readable condition name; must not already exist in the spec.
+        condition_request: {condition: method name from list_conditions, params: dict}.
+        datasets: Feature classes/tables used by condition_request, each with
+            'name' and an optional 'filter_expression'.
+        workspace_id: Logical workspace id to bind datasets to (e.g. "DATA_OSM").
+        allow_errors: Whether issues from this condition are tolerated.
+        description: Optional description element.
+        spec_xml: Spec XML text; defaults to reading the configured/loaded
+            spec path if omitted.
 
-    Returns the full updated spec XML as a string, ready to review and,
-    once confirmed, write back to the .qa.xml file yourself.
+    Returns the updated spec XML, ready to review and persist yourself.
     """
     if spec_xml is None:
         cfg = load_config()
@@ -442,7 +413,12 @@ def add_condition_to_spec(
                 "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path, "
                 "call load_spec first, or pass spec_xml explicitly."
             )
-        spec_xml = Path(cfg.spec_path).read_text(encoding="utf-8")
+        try:
+            spec_xml = Path(cfg.spec_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ValueError(
+                f"Could not read spec file {cfg.spec_path!r}: {exc}"
+            ) from exc
 
     ns = _NS["qa"]
 

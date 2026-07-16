@@ -605,6 +605,26 @@ def test_add_condition_to_spec_raises_without_spec_xml_or_configured_path():
             )
 
 
+def test_add_condition_to_spec_raises_value_error_when_configured_path_missing():
+    from prosuite_mcp.server import add_condition_to_spec
+
+    with patch(
+        "prosuite_mcp.server.load_config",
+        return_value=_cfg(spec_path="/does/not/exist.qa.xml"),
+    ):
+        with pytest.raises(ValueError, match="Could not read spec file"):
+            add_condition_to_spec(
+                target_specification_name="MySpec",
+                name="lines minlen",
+                condition_request=ConditionRequest(
+                    condition="qa_min_length_1",
+                    params={"feature_class": "lines", "limit": 2.0},
+                ),
+                datasets=[DatasetRef(name="lines")],
+                workspace_id="DATA_OSM",
+            )
+
+
 # ---------------------------------------------------------------------------
 # _summarize
 # ---------------------------------------------------------------------------

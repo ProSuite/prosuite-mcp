@@ -475,7 +475,7 @@ def test_add_condition_to_spec_rejects_missing_descriptor():
         )
 
 
-def test_condition_to_xml_emits_lowercase_allow_errors():
+def test_condition_to_xml_emits_pascal_case_allow_errors():
     from prosuite_mcp.server import condition_to_xml
 
     xml_false = condition_to_xml(
@@ -501,11 +501,10 @@ def test_condition_to_xml_emits_lowercase_allow_errors():
         allow_errors=True,
     )
 
-    # XML Schema / .NET XmlConvert booleans are lowercase; Python's str(bool)
-    # ("True"/"False") would fail to parse on the engine side.
-    assert 'allowErrors="false"' in xml_false
-    assert 'allowErrors="true"' in xml_true
-    assert "True" not in xml_false and "False" not in xml_false
+    # allowErrors maps to ProSuite's Override enum (Null/True/False), not
+    # xs:boolean; the real engine rejects lowercase "false"/"true" here.
+    assert 'allowErrors="False"' in xml_false
+    assert 'allowErrors="True"' in xml_true
 
 
 def test_add_condition_to_spec_preserves_xml_declaration():

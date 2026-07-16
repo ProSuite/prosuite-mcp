@@ -276,9 +276,10 @@ def _build_condition_element(
         {
             "name": name,
             "testDescriptor": test_descriptor,
-            # XML Schema / .NET XmlConvert booleans are lowercase; str(bool)
-            # would emit "True"/"False" and fail to parse on the engine side.
-            "allowErrors": "true" if allow_errors else "false",
+            # allowErrors maps to ProSuite's Override enum (Null/True/False),
+            # not xs:boolean; XmlSerializer matches enum names case-sensitively,
+            # so it must be "True"/"False", not lowercase.
+            "allowErrors": "True" if allow_errors else "False",
         },
     )
     if description:

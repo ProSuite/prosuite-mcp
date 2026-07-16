@@ -586,6 +586,64 @@ def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str,
     }
 
 
+def _run_verification_impl(
+    model_catalog_path: str,
+    model_name: str,
+    datasets: list[DatasetRef],
+    conditions: list[ConditionRequest],
+    output_dir: str | None,
+    envelope: dict[str, float] | None,
+    run_dir_prefix: str,
+) -> dict[str, Any]:
+    try:
+        model = Model(model_name, model_catalog_path)
+        dataset_map: dict[str, Dataset] = {
+            ds.name: Dataset(ds.name, model, ds.filter_expression) for ds in datasets
+        }
+
+        spec = Specification(name="prosuite-mcp verification")
+        for cond_req in conditions:
+            spec.add_condition(_build_condition(cond_req, dataset_map))
+    except ValueError as exc:
+        return {"status": "error", "engine_confirmed": False, "error": str(exc)}
+
+    perimeter = None
+    if envelope:
+        perimeter = EnvelopePerimeter(
+            x_min=envelope["x_min"],
+            y_min=envelope["y_min"],
+            x_max=envelope["x_max"],
+            y_max=envelope["y_max"],
+        )
+
+    if output_dir is None:
+        output_dir = str(_make_run_dir(run_dir_prefix, Path.cwd() / "runs"))
+
+    service = _make_service()
+
+    try:
+        outcome, verified_spec = _run_verify(service, spec, output_dir, perimeter)
+    except grpc.RpcError as exc:
+        return {
+            "status": "error",
+            "engine_confirmed": False,
+            "error": f"gRPC {exc.code()}: {exc.details()}",
+        }
+
+    if verified_spec is None:
+        return {
+            "status": "error",
+            "engine_confirmed": False,
+            "error": "Verification stream ended without a final summary.",
+            "issues_seen_in_stream": outcome.total,
+        }
+
+    summary = _summarize(verified_spec, outcome)
+    summary["status"] = "success"
+    summary["output_dir"] = output_dir
+    return summary
+
+
 @mcp.tool()
 def run_verification(
     model_catalog_path: str,
@@ -626,53 +684,15 @@ def run_verification(
     breakdown. Check 'status': 'error' for connection or parameter
     failures.
     """
-    try:
-        model = Model(model_name, model_catalog_path)
-        dataset_map: dict[str, Dataset] = {
-            ds.name: Dataset(ds.name, model, ds.filter_expression) for ds in datasets
-        }
-
-        spec = Specification(name="prosuite-mcp verification")
-        for cond_req in conditions:
-            spec.add_condition(_build_condition(cond_req, dataset_map))
-    except ValueError as exc:
-        return {"status": "error", "engine_confirmed": False, "error": str(exc)}
-
-    perimeter = None
-    if envelope:
-        perimeter = EnvelopePerimeter(
-            x_min=envelope["x_min"],
-            y_min=envelope["y_min"],
-            x_max=envelope["x_max"],
-            y_max=envelope["y_max"],
-        )
-
-    if output_dir is None:
-        output_dir = str(_make_run_dir("adhoc", Path.cwd() / "runs"))
-
-    service = _make_service()
-
-    try:
-        outcome, verified_spec = _run_verify(service, spec, output_dir, perimeter)
-    except grpc.RpcError as exc:
-        return {
-            "status": "error",
-            "engine_confirmed": False,
-            "error": f"gRPC {exc.code()}: {exc.details()}",
-        }
-
-    if verified_spec is None:
-        return {
-            "status": "error",
-            "engine_confirmed": False,
-            "error": "Verification stream ended without a final summary.",
-            "issues_seen_in_stream": outcome.total,
-        }
-
-    summary = _summarize(verified_spec, outcome)
-    summary["status"] = "success"
-    summary["output_dir"] = output_dir
-    return summary
+    return _run_verification_impl(
+        model_catalog_path,
+        model_name,
+        datasets,
+        conditions,
+        output_dir,
+        envelope,
+        "adhoc",
+    )
 
 
 @mcp.tool()
@@ -705,15 +725,14 @@ def preview_condition_run(
         output_dir: Optional server-side directory for Issues.gdb and HTML report.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
     """
-    if output_dir is None:
-        output_dir = str(_make_run_dir("preview", Path.cwd() / "runs"))
-    return run_verification(
-        model_catalog_path=model_catalog_path,
-        model_name=workspace_id,
-        datasets=datasets,
-        conditions=[condition_request],
-        output_dir=output_dir,
-        envelope=envelope,
+    return _run_verification_impl(
+        model_catalog_path,
+        workspace_id,
+        datasets,
+        [condition_request],
+        output_dir,
+        envelope,
+        "preview",
     )
 
 

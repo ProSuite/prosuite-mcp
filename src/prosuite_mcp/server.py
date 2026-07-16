@@ -616,6 +616,7 @@ def run_verification(
     except grpc.RpcError as exc:
         return {
             "status": "error",
+            "engine_confirmed": False,
             "error": f"gRPC {exc.code()}: {exc.details()}",
         }
 
@@ -695,7 +696,11 @@ def run_xml_verification(
     try:
         outcome, verified_spec = _run_verify(service, xml_spec, output_dir, perimeter)
     except grpc.RpcError as exc:
-        return {"status": "error", "error": f"gRPC {exc.code()}: {exc.details()}"}
+        return {
+            "status": "error",
+            "engine_confirmed": False,
+            "error": f"gRPC {exc.code()}: {exc.details()}",
+        }
 
     if verified_spec is None:
         return {

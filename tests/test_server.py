@@ -829,6 +829,7 @@ def test_run_verification_grpc_error(tmp_path):
 
     assert result["status"] == "error"
     assert "unavailable" in result["error"].lower()
+    assert result["engine_confirmed"] is False
 
 
 def test_run_verification_unknown_condition():
@@ -984,6 +985,7 @@ def test_run_xml_verification_grpc_error(tmp_path):
 
     assert result["status"] == "error"
     assert "unavailable" in result["error"].lower()
+    assert result["engine_confirmed"] is False
 
 
 def test_run_xml_verification_no_final_summary(tmp_path):

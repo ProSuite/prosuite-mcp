@@ -471,6 +471,95 @@ def test_add_condition_to_spec_rejects_missing_descriptor():
         )
 
 
+def test_condition_to_xml_emits_lowercase_allow_errors():
+    from prosuite_mcp.server import condition_to_xml
+
+    xml_false = condition_to_xml(
+        name="lines: minimum length",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 1.5},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+        test_descriptor="MinLength(1)",
+        allow_errors=False,
+    )
+    xml_true = condition_to_xml(
+        name="lines: minimum length",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 1.5},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+        test_descriptor="MinLength(1)",
+        allow_errors=True,
+    )
+
+    # XML Schema / .NET XmlConvert booleans are lowercase; Python's str(bool)
+    # ("True"/"False") would fail to parse on the engine side.
+    assert 'allowErrors="false"' in xml_false
+    assert 'allowErrors="true"' in xml_true
+    assert "True" not in xml_false and "False" not in xml_false
+
+
+def test_add_condition_to_spec_preserves_xml_declaration():
+    from prosuite_mcp.server import add_condition_to_spec
+
+    updated = add_condition_to_spec(
+        spec_xml=_SPEC_FOR_AUTHORING,
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+    )
+
+    assert updated.startswith('<?xml version="1.0" encoding="utf-8"?>')
+
+
+def test_add_condition_to_spec_rejects_duplicate_name():
+    from prosuite_mcp.server import add_condition_to_spec
+
+    with pytest.raises(ValueError, match="Existing_Cond"):
+        add_condition_to_spec(
+            spec_xml=_SPEC_FOR_AUTHORING,
+            target_specification_name="MySpec",
+            name="Existing_Cond",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )
+
+
+def test_add_condition_to_spec_builds_condition_once():
+    import prosuite_mcp.server as server_module
+
+    with patch.object(
+        server_module, "_build_condition", wraps=server_module._build_condition
+    ) as mock_build:
+        server_module.add_condition_to_spec(
+            spec_xml=_SPEC_FOR_AUTHORING,
+            target_specification_name="MySpec",
+            name="lines minlen",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )
+
+    assert mock_build.call_count == 1
+
+
 # ---------------------------------------------------------------------------
 # _summarize
 # ---------------------------------------------------------------------------

@@ -253,6 +253,58 @@ def _build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
     return method(**kwargs)
 
 
+def _build_condition_element(
+    name: str,
+    condition: Any,
+    workspace_id: str,
+    test_descriptor: str,
+    allow_errors: bool = False,
+    description: str = "",
+) -> ET.Element:
+    """Build a <QualityCondition> element from an already-built condition object.
+
+    Shared by condition_to_xml and add_condition_to_spec so the latter only
+    calls _build_condition once per invocation.
+    """
+    ns = _NS["qa"]
+
+    def q(tag: str) -> str:
+        return f"{{{ns}}}{tag}"
+
+    cond_el = ET.Element(
+        q("QualityCondition"),
+        {
+            "name": name,
+            "testDescriptor": test_descriptor,
+            # XML Schema / .NET XmlConvert booleans are lowercase; str(bool)
+            # would emit "True"/"False" and fail to parse on the engine side.
+            "allowErrors": "true" if allow_errors else "false",
+        },
+    )
+    if description:
+        ET.SubElement(cond_el, q("Description")).text = description
+
+    params_el = ET.SubElement(cond_el, q("Parameters"))
+    for p in condition.parameters:
+        if p.dataset is not None:
+            attrs = {
+                "parameter": p.name,
+                "value": p.dataset.name,
+                "workspace": workspace_id,
+            }
+            if p.dataset.filter_expression:
+                attrs["where"] = p.dataset.filter_expression
+            ET.SubElement(params_el, q("Dataset"), attrs)
+        else:
+            ET.SubElement(
+                params_el,
+                q("Scalar"),
+                {"parameter": p.name, "value": str(p.value)},
+            )
+
+    return cond_el
+
+
 def condition_to_xml(
     name: str,
     condition_request: ConditionRequest,
@@ -277,42 +329,11 @@ def condition_to_xml(
         for ds in datasets
     }
     condition = _build_condition(condition_request, dataset_map)
-
-    ns = _NS["qa"]
-
-    def q(tag: str) -> str:
-        return f"{{{ns}}}{tag}"
-
-    cond_el = ET.Element(
-        q("QualityCondition"),
-        {
-            "name": name,
-            "testDescriptor": test_descriptor,
-            "allowErrors": str(allow_errors),
-        },
+    cond_el = _build_condition_element(
+        name, condition, workspace_id, test_descriptor, allow_errors, description
     )
-    if description:
-        ET.SubElement(cond_el, q("Description")).text = description
 
-    params_el = ET.SubElement(cond_el, q("Parameters"))
-    for p in condition.parameters:
-        if p.dataset is not None:
-            attrs = {
-                "parameter": p.name,
-                "value": p.dataset.name,
-                "workspace": workspace_id,
-            }
-            if p.dataset.filter_expression:
-                attrs["where"] = p.dataset.filter_expression
-            ET.SubElement(params_el, q("Dataset"), attrs)
-        else:
-            ET.SubElement(
-                params_el,
-                q("Scalar"),
-                {"parameter": p.name, "value": str(p.value)},
-            )
-
-    ET.register_namespace("", ns)
+    ET.register_namespace("", _NS["qa"])
     return ET.tostring(cond_el, encoding="unicode")
 
 
@@ -353,7 +374,10 @@ def add_condition_to_spec(
     named specification, reusing an existing <TestDescriptor>.
 
     Pure string-in / string-out: it does not touch the filesystem, so the caller
-    can preview the proposal and write only on confirmation.
+    can preview the proposal and write only on confirmation. Raises ValueError
+    if name already names a <QualityCondition> in the spec, so calling this
+    twice with the same name fails loudly instead of producing a spec with
+    duplicate condition entries.
     """
     ns = _NS["qa"]
 
@@ -371,6 +395,12 @@ def add_condition_to_spec(
     ET.register_namespace("", ns)
     root = ET.fromstring(spec_xml)
 
+    qcs = root.find(q("QualityConditions"))
+    if qcs is None:
+        raise ValueError("Spec has no <QualityConditions> section.")
+    if any(c.get("name") == name for c in qcs.findall(q("QualityCondition"))):
+        raise ValueError(f"Spec already has a QualityCondition named {name!r}.")
+
     alias = _find_descriptor_alias(root, condition.test_descriptor)
     if alias is None:
         raise ValueError(
@@ -378,21 +408,9 @@ def add_condition_to_spec(
             f"in the target spec; reuse-existing only (cannot synthesize a descriptor)."
         )
 
-    cond_el = ET.fromstring(
-        condition_to_xml(
-            name,
-            condition_request,
-            datasets,
-            workspace_id,
-            alias,
-            allow_errors,
-            description,
-        )
+    cond_el = _build_condition_element(
+        name, condition, workspace_id, alias, allow_errors, description
     )
-
-    qcs = root.find(q("QualityConditions"))
-    if qcs is None:
-        raise ValueError("Spec has no <QualityConditions> section.")
     qcs.append(cond_el)
 
     specs = root.find(q("QualitySpecifications"))
@@ -411,7 +429,9 @@ def add_condition_to_spec(
         elements = ET.SubElement(target, q("Elements"))
     ET.SubElement(elements, q("Element"), {"qualityCondition": name})
 
-    return ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(
+        root, encoding="unicode"
+    )
 
 
 def _decode_issue(issue: Any) -> dict[str, Any]:

@@ -464,6 +464,7 @@ class StreamOutcome:
     warnings: int = 0  # issue.allowable is True (allowed / soft)
     counts_by_code: dict[str, int] = field(default_factory=dict)
     counts_by_table: dict[str, int] = field(default_factory=dict)
+    counts_by_condition: dict[int | None, int] = field(default_factory=dict)
     sample: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -489,6 +490,11 @@ def _run_verify(
                 outcome.errors += 1
             code = issue.issue_code
             outcome.counts_by_code[code] = outcome.counts_by_code.get(code, 0) + 1
+            if not issue.allowable:
+                cid = issue.condition_id
+                outcome.counts_by_condition[cid] = (
+                    outcome.counts_by_condition.get(cid, 0) + 1
+                )
             for t in issue.involved_objects:
                 name = t.table_name
                 outcome.counts_by_table[name] = outcome.counts_by_table.get(name, 0) + 1
@@ -500,6 +506,18 @@ def _run_verify(
 
 
 def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str, Any]:
+    # Every issue's condition_id is expected to match one of spec's verified
+    # conditions. unmatched_condition_errors is normally 0; a nonzero value
+    # means some stream errors couldn't be attributed to a known condition
+    # (e.g. verified_conditions is incomplete), so
+    # sum(conditions[*].errors) + unmatched_condition_errors == total_errors
+    # always, even when the breakdown itself is short some counts.
+    known_ids = {c.condition_id for c in spec.verified_conditions}
+    matched_errors = sum(
+        n for cid, n in outcome.counts_by_condition.items() if cid in known_ids
+    )
+    unmatched_errors = outcome.errors - matched_errors
+
     return {
         "engine_confirmed": True,
         "specification_name": spec.specification_name,
@@ -510,11 +528,17 @@ def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str,
         "issues_seen_in_stream": outcome.total,
         "issue_counts_by_code": outcome.counts_by_code,
         "issue_counts_by_table": outcome.counts_by_table,
+        "unmatched_condition_errors": unmatched_errors,
         "sample_features": outcome.sample,
         "conditions": [
             {
                 "name": c.name or f"condition_{c.condition_id}",
-                "errors": c.error_count,
+                # Same allowable-is-False tally as total_errors, keyed by
+                # condition_id, so the two are always consistent by
+                # construction instead of relying on the engine's separate
+                # error_count field (whose warning-inclusion semantics are
+                # not guaranteed to match the stream's allowable distinction).
+                "errors": outcome.counts_by_condition.get(c.condition_id, 0),
             }
             for c in spec.verified_conditions
         ],

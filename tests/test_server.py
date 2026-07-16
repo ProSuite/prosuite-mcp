@@ -262,13 +262,14 @@ def test_decode_issue_maps_core_fields():
 # ---------------------------------------------------------------------------
 
 
-def _fake_issue(code: str, table: str, allowable: bool):
+def _fake_issue(code: str, table: str, allowable: bool, condition_id: int = 0):
     from types import SimpleNamespace
 
     return SimpleNamespace(
         issue_code=code,
         description="d",
         allowable=allowable,
+        condition_id=condition_id,
         involved_objects=[SimpleNamespace(table_name=table, object_ids=[1])],
     )
 
@@ -281,13 +282,13 @@ def test_run_verify_aggregates_stream_without_retaining_all_issues():
     responses = [
         SimpleNamespace(
             issues=[
-                _fake_issue("A", "lines", allowable=False),
-                _fake_issue("A", "lines", allowable=False),
+                _fake_issue("A", "lines", allowable=False, condition_id=1),
+                _fake_issue("A", "lines", allowable=False, condition_id=1),
             ],
             verified_specification=None,
         ),
         SimpleNamespace(
-            issues=[_fake_issue("B", "points", allowable=True)],
+            issues=[_fake_issue("B", "points", allowable=True, condition_id=2)],
             verified_specification="SPEC",
         ),
     ]
@@ -301,6 +302,9 @@ def test_run_verify_aggregates_stream_without_retaining_all_issues():
     assert outcome.warnings == 1  # allowable is True
     assert outcome.counts_by_code == {"A": 2, "B": 1}
     assert outcome.counts_by_table == {"lines": 2, "points": 1}
+    # counts_by_condition only tallies allowable=False issues, same filter as
+    # total_errors, so the two stay consistent by construction.
+    assert outcome.counts_by_condition == {1: 2}
     assert len(outcome.sample) == 3
     assert outcome.sample[0]["issue_code"] == "A"
 
@@ -574,9 +578,13 @@ def test_summarize():
             VerifiedCondition(condition_id=2, name="cond_b", error_count=0),
         ],
     )
-    # total_errors/total_warnings come from the stream; the per-condition
-    # breakdown still comes from verified_conditions (populated on the XML path).
-    result = _summarize(spec, StreamOutcome(total=3, errors=3, warnings=0))
+    # total_errors and the per-condition breakdown both come from the stream
+    # (counts_by_condition), so they are consistent by construction; the
+    # engine's own error_count on VerifiedCondition is unused.
+    result = _summarize(
+        spec,
+        StreamOutcome(total=3, errors=3, warnings=0, counts_by_condition={1: 3}),
+    )
     assert result["total_errors"] == 3
     assert result["total_warnings"] == 0
     assert result["total_conditions"] == 2
@@ -584,6 +592,35 @@ def test_summarize():
     assert result["conditions"][0]["name"] == "cond_a"
     assert result["conditions"][0]["errors"] == 3
     assert result["conditions"][1]["errors"] == 0
+    assert result["unmatched_condition_errors"] == 0
+    assert sum(c["errors"] for c in result["conditions"]) == result["total_errors"]
+
+
+def test_summarize_reports_unmatched_condition_errors():
+    # An issue's condition_id (99) that doesn't correspond to any verified
+    # condition would otherwise be silently dropped from the per-condition
+    # breakdown while still counting toward total_errors. unmatched_condition_errors
+    # surfaces that gap instead of hiding it.
+    spec = VerifiedSpecification(
+        specification_name="Test Spec",
+        user_name="alice",
+        verified_conditions=[
+            VerifiedCondition(condition_id=1, name="cond_a", error_count=0),
+        ],
+    )
+    result = _summarize(
+        spec,
+        StreamOutcome(total=5, errors=5, warnings=0, counts_by_condition={1: 3, 99: 2}),
+    )
+
+    assert result["total_errors"] == 5
+    assert result["conditions"][0]["errors"] == 3
+    assert result["unmatched_condition_errors"] == 2
+    assert (
+        sum(c["errors"] for c in result["conditions"])
+        + result["unmatched_condition_errors"]
+        == result["total_errors"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +648,10 @@ def test_run_verification_success(tmp_path):
         patch("prosuite_mcp.server._run_verify") as mock_stream,
         patch("prosuite_mcp.server.Path") as mock_path,
     ):
-        mock_stream.return_value = (StreamOutcome(total=2, errors=2), final_spec)
+        mock_stream.return_value = (
+            StreamOutcome(total=2, errors=2, counts_by_condition={1: 2}),
+            final_spec,
+        )
         mock_path.cwd.return_value = tmp_path
 
         result = run_verification(

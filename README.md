@@ -84,6 +84,8 @@ Returns a summary with `status`, `total_errors`, and a per-condition breakdown.
 
 **`add_condition_to_spec`** — Previews adding a new `QualityCondition` to a spec: resolves an existing `<TestDescriptor>` whose test class matches (never synthesizes one), and returns the full updated spec XML with the condition appended and wired into the named `QualitySpecification`. Pure preview — it never writes to a file, so review the result before persisting it. Reads the currently loaded/configured spec unless `spec_xml` is passed explicitly.
 
+**`preview_condition_run`** — Runs a single proposed condition ad-hoc and returns the actual flagged features (same summary shape as `run_verification`), so a condition from `add_condition_to_spec` can be judged by what it flags before being merged into a spec, not just by whether it builds.
+
 ### Example
 
 Once connected, you talk to Claude in plain language:

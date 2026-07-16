@@ -937,6 +937,122 @@ def test_run_verification_with_output_dir():
 
 
 # ---------------------------------------------------------------------------
+# preview_condition_run
+# ---------------------------------------------------------------------------
+
+
+def test_preview_condition_run_surfaces_flagged_features(tmp_path):
+    from prosuite_mcp.server import preview_condition_run
+
+    spec = _mock_verified_spec()
+    sample = [
+        {"issue_code": "A", "description": "d", "allowable": False, "involved": []},
+    ]
+    outcome = StreamOutcome(
+        total=1, errors=1, counts_by_condition={1: 1}, sample=sample
+    )
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_verify", return_value=(outcome, spec)),
+        patch(
+            "prosuite_mcp.server._make_run_dir", return_value=tmp_path / "preview_run"
+        ),
+    ):
+        result = preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=ConditionRequest(
+                condition="qa3d_constant_z_0",
+                params={"feature_class": "Roads", "tolerance": 0.01},
+            ),
+            datasets=[DatasetRef(name="Roads")],
+            workspace_id="TestModel",
+        )
+
+    assert result["status"] == "success"
+    assert result["engine_confirmed"] is True
+    assert result["total_errors"] == 1
+    assert result["sample_features"] == sample
+
+
+def test_preview_condition_run_does_not_create_dir_on_invalid_condition():
+    from prosuite_mcp.server import preview_condition_run
+
+    with patch("prosuite_mcp.server._make_run_dir") as mock_make_run_dir:
+        result = preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=ConditionRequest(
+                condition="no_such_condition_xyz", params={}
+            ),
+            datasets=[DatasetRef(name="Roads")],
+            workspace_id="TestModel",
+        )
+
+    assert result["status"] == "error"
+    mock_make_run_dir.assert_not_called()
+
+
+def test_preview_condition_run_uses_preview_prefixed_run_dir(tmp_path):
+    from prosuite_mcp.server import preview_condition_run
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), _mock_verified_spec()),
+        ),
+        patch(
+            "prosuite_mcp.server._make_run_dir", return_value=tmp_path / "run"
+        ) as mock_make_run_dir,
+    ):
+        preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=ConditionRequest(
+                condition="qa3d_constant_z_0",
+                params={"feature_class": "Roads", "tolerance": 0.01},
+            ),
+            datasets=[DatasetRef(name="Roads")],
+            workspace_id="TestModel",
+        )
+
+    assert mock_make_run_dir.call_args[0][0] == "preview"
+
+
+def test_preview_condition_run_forwards_params_to_shared_impl():
+    from prosuite_mcp.server import preview_condition_run
+
+    cond_req = ConditionRequest(
+        condition="qa3d_constant_z_0",
+        params={"feature_class": "Roads", "tolerance": 0.01},
+    )
+    datasets = [DatasetRef(name="Roads")]
+
+    with patch(
+        "prosuite_mcp.server._run_verification_impl",
+        return_value={"status": "success"},
+    ) as mock_impl:
+        result = preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=cond_req,
+            datasets=datasets,
+            workspace_id="TestModel",
+            output_dir="C:/output",
+            envelope={"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
+        )
+
+    mock_impl.assert_called_once_with(
+        "C:/test.gdb",
+        "TestModel",
+        datasets,
+        [cond_req],
+        "C:/output",
+        {"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
+        "preview",
+    )
+    assert result == {"status": "success"}
+
+
+# ---------------------------------------------------------------------------
 # describe_spec
 # ---------------------------------------------------------------------------
 

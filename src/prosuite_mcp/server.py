@@ -305,6 +305,7 @@ def _build_condition_element(
     return cond_el
 
 
+@mcp.tool()
 def condition_to_xml(
     name: str,
     condition_request: ConditionRequest,
@@ -314,13 +315,36 @@ def condition_to_xml(
     allow_errors: bool = False,
     description: str = "",
 ) -> str:
-    """Serialize a condition request into a ProSuite <QualityCondition> element.
+    """Preview a single ProSuite <QualityCondition> element, without touching a spec.
 
-    The condition is built through the authoritative prosuite factory (via
-    _build_condition), so parameter XML names, dataset/scalar classification,
-    and value formatting come from the engine's own model rather than string
-    reversal. test_descriptor is the descriptor alias to reference; per the
-    reuse-existing strategy the caller looks it up in the target spec.
+    Serializes condition_request into the XML ProSuite would store for it. The
+    condition is built through the authoritative prosuite factory (the same
+    path run_verification uses), so parameter XML names, dataset/scalar
+    classification, and value formatting come from the engine's own model
+    rather than guesswork. Pure preview: returns a string, never writes
+    anywhere or mutates a spec.
+
+    test_descriptor must be the name of a <TestDescriptor> that already
+    exists in the target spec (e.g. "MinLength(1)") — this tool does not look
+    one up for you. Use add_condition_to_spec instead if you want the
+    descriptor resolved automatically and the condition wired into a real
+    QualitySpecification.
+
+    Args:
+        name: Human-readable condition name, e.g. "lines: minimum length".
+        condition_request: {condition: method name from list_conditions,
+            params: dict of parameter name -> value}.
+        datasets: Feature classes/tables referenced by condition_request's
+            dataset parameters. Each entry has a 'name' and an optional
+            'filter_expression' (per-condition WHERE clause).
+        workspace_id: Logical workspace id to bind dataset parameters to
+            (e.g. "DATA_OSM"); must match a <Workspace> id in the target spec.
+        test_descriptor: Existing <TestDescriptor> name/alias to reference.
+        allow_errors: Whether issues from this condition are tolerated
+            (allowErrors="true") or hard failures.
+        description: Optional human-readable description element.
+
+    Returns the <QualityCondition> XML fragment as a string.
     """
     dataset_map = {
         ds.name: Dataset(
@@ -360,8 +384,8 @@ def _find_descriptor_alias(root: ET.Element, test_descriptor: str) -> str | None
     return None
 
 
+@mcp.tool()
 def add_condition_to_spec(
-    spec_xml: str,
     target_specification_name: str,
     name: str,
     condition_request: ConditionRequest,
@@ -369,16 +393,57 @@ def add_condition_to_spec(
     workspace_id: str,
     allow_errors: bool = False,
     description: str = "",
+    spec_xml: str | None = None,
 ) -> str:
-    """Return spec_xml with a new <QualityCondition> added and wired into the
-    named specification, reusing an existing <TestDescriptor>.
+    """Preview adding a new QualityCondition to a spec, reusing an existing descriptor.
 
-    Pure string-in / string-out: it does not touch the filesystem, so the caller
-    can preview the proposal and write only on confirmation. Raises ValueError
-    if name already names a <QualityCondition> in the spec, so calling this
-    twice with the same name fails loudly instead of producing a spec with
-    duplicate condition entries.
+    Builds the condition through the authoritative prosuite factory (the same
+    path run_verification uses), resolves an existing <TestDescriptor> whose
+    test class matches (never synthesizes one), and returns the full updated
+    spec XML with the new <QualityCondition> appended and wired into
+    target_specification_name's <Elements>.
+
+    This is preview-only: it returns a string and never writes to any file, so
+    the result should be reviewed before being persisted. Call describe_spec
+    first to find valid specification_name/workspace_id/dataset values.
+
+    Raises ValueError if: name already names a <QualityCondition> in the spec
+    (prevents duplicate entries from an accidental repeat call), no
+    <TestDescriptor> matches the condition's test class (reuse-existing only),
+    or target_specification_name is not found in the spec.
+
+    Args:
+        target_specification_name: Name of the QualitySpecification to wire
+            the new condition into (from describe_spec).
+        name: Human-readable condition name, e.g. "lines: minimum length".
+            Must not already exist in the spec.
+        condition_request: {condition: method name from list_conditions,
+            params: dict of parameter name -> value}.
+        datasets: Feature classes/tables referenced by condition_request's
+            dataset parameters. Each entry has a 'name' and an optional
+            'filter_expression' (per-condition WHERE clause).
+        workspace_id: Logical workspace id to bind dataset parameters to
+            (e.g. "DATA_OSM"); must match a <Workspace> id in the spec.
+        allow_errors: Whether issues from this condition are tolerated
+            (allowErrors="true") or hard failures.
+        description: Optional human-readable description element.
+        spec_xml: The spec's XML text. If omitted, reads the file at the
+            currently configured/loaded spec path (see load_spec /
+            PROSUITE_SPEC_PATH) instead of requiring the full spec text as
+            a call argument.
+
+    Returns the full updated spec XML as a string, ready to review and,
+    once confirmed, write back to the .qa.xml file yourself.
     """
+    if spec_xml is None:
+        cfg = load_config()
+        if not cfg.spec_path:
+            raise ValueError(
+                "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path, "
+                "call load_spec first, or pass spec_xml explicitly."
+            )
+        spec_xml = Path(cfg.spec_path).read_text(encoding="utf-8")
+
     ns = _NS["qa"]
 
     def q(tag: str) -> str:

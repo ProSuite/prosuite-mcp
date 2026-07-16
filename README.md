@@ -57,7 +57,11 @@ copilot mcp add prosuite \
 
 **`load_spec <path>`** — Loads a `.qa.xml` spec file. Call this at the start of a session with the path to your spec (local drive, OneDrive, network share). Replaces any previously loaded spec.
 
+**`describe_spec`** — Describes the loaded spec: available `specification_name` values, `workspace_id` keys that need path substitutions, and per-specification dataset lists. Call this before `run_xml_verification`.
+
 **`search_spec <query> [max_results]`** — Searches the loaded `.qa.xml` spec for conditions matching a natural-language query (English, German, French, Italian). Returns up to `max_results` (default 20) matching conditions with pre-filled `condition_request` blocks ready to pass directly to `run_verification`, plus the `required_datasets` list. Requires a spec to be loaded first via `load_spec`.
+
+**`run_xml_verification`** — Runs a named `QualitySpecification` directly from the loaded XML spec, with workspace path substitutions. Unlike `run_verification`, the XML is sent to ProSuite as-is, preserving per-condition dataset filters and all other spec details exactly as configured. Preferred whenever a `.qa.xml` spec exists.
 
 **`list_conditions [search]`** — Lists available quality conditions. Pass a keyword to filter by name or description.
 
@@ -75,6 +79,10 @@ copilot mcp add prosuite \
 | `envelope` | object? | Spatial filter `{x_min, y_min, x_max, y_max}` |
 
 Returns a summary with `status`, `total_errors`, and a per-condition breakdown.
+
+**`condition_to_xml`** — Previews the `<QualityCondition>` XML for a single condition, without touching any spec. Requires an existing `test_descriptor` alias (e.g. `MinLength(1)`); does not look one up for you. Mainly useful for inspecting parameter serialization in isolation — `add_condition_to_spec` is the tool for actually adding a condition to a spec.
+
+**`add_condition_to_spec`** — Previews adding a new `QualityCondition` to a spec: resolves an existing `<TestDescriptor>` whose test class matches (never synthesizes one), and returns the full updated spec XML with the condition appended and wired into the named `QualitySpecification`. Pure preview — it never writes to a file, so review the result before persisting it. Reads the currently loaded/configured spec unless `spec_xml` is passed explicitly.
 
 ### Example
 

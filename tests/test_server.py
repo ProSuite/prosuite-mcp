@@ -564,6 +564,47 @@ def test_add_condition_to_spec_builds_condition_once():
     assert mock_build.call_count == 1
 
 
+def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(tmp_path):
+    from prosuite_mcp.server import add_condition_to_spec
+
+    spec_file = tmp_path / "test.qa.xml"
+    spec_file.write_text(_SPEC_FOR_AUTHORING, encoding="utf-8")
+
+    with patch(
+        "prosuite_mcp.server.load_config",
+        return_value=_cfg(spec_path=str(spec_file)),
+    ):
+        updated = add_condition_to_spec(
+            target_specification_name="MySpec",
+            name="lines minlen",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )
+
+    assert "lines minlen" in updated
+
+
+def test_add_condition_to_spec_raises_without_spec_xml_or_configured_path():
+    from prosuite_mcp.server import add_condition_to_spec
+
+    with patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path=None)):
+        with pytest.raises(ValueError, match="No spec loaded"):
+            add_condition_to_spec(
+                target_specification_name="MySpec",
+                name="lines minlen",
+                condition_request=ConditionRequest(
+                    condition="qa_min_length_1",
+                    params={"feature_class": "lines", "limit": 2.0},
+                ),
+                datasets=[DatasetRef(name="lines")],
+                workspace_id="DATA_OSM",
+            )
+
+
 # ---------------------------------------------------------------------------
 # _summarize
 # ---------------------------------------------------------------------------

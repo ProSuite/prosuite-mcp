@@ -34,3 +34,9 @@ Builds a `Specification` programmatically from individual `ConditionRequest` obj
 | `run_xml_verification` | Run a named QualitySpecification from the loaded spec, with workspace path substitutions |
 | `list_conditions`, `describe_condition` | Explore the full condition catalog for ad-hoc use |
 | `run_verification` | Ad-hoc verification without a spec |
+| `condition_to_xml` | Preview a single condition's XML in isolation; requires an already-known `test_descriptor` alias |
+| `add_condition_to_spec` | Preview adding a new QualityCondition to a spec, reusing an existing descriptor; returns updated spec XML, never writes a file |
+
+## Spec Authoring
+
+`condition_to_xml` and `add_condition_to_spec` are preview-only: they build the condition through the same authoritative prosuite factory `run_verification` uses, so parameter names and value formatting are engine-derived, not guessed. Neither tool writes to disk — the caller (human or agent) reviews the returned XML and decides separately whether and how to persist it. `add_condition_to_spec` only reuses an existing `<TestDescriptor>`; it never synthesizes one, so a condition whose test type isn't already referenced somewhere in the target spec cannot currently be added this way.

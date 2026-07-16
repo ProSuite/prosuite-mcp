@@ -705,6 +705,8 @@ def preview_condition_run(
         output_dir: Optional server-side directory for Issues.gdb and HTML report.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
     """
+    if output_dir is None:
+        output_dir = str(_make_run_dir("preview", Path.cwd() / "runs"))
     return run_verification(
         model_catalog_path=model_catalog_path,
         model_name=workspace_id,

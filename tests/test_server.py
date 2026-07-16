@@ -955,9 +955,10 @@ def test_preview_condition_run_surfaces_flagged_features(tmp_path):
     with (
         patch("prosuite_mcp.server._make_service"),
         patch("prosuite_mcp.server._run_verify", return_value=(outcome, spec)),
-        patch("prosuite_mcp.server.Path") as mock_path,
+        patch(
+            "prosuite_mcp.server._make_run_dir", return_value=tmp_path / "preview_run"
+        ),
     ):
-        mock_path.cwd.return_value = tmp_path
         result = preview_condition_run(
             model_catalog_path="C:/test.gdb",
             condition_request=ConditionRequest(
@@ -972,6 +973,32 @@ def test_preview_condition_run_surfaces_flagged_features(tmp_path):
     assert result["engine_confirmed"] is True
     assert result["total_errors"] == 1
     assert result["sample_features"] == sample
+
+
+def test_preview_condition_run_uses_preview_prefixed_run_dir(tmp_path):
+    from prosuite_mcp.server import preview_condition_run
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch(
+            "prosuite_mcp.server._run_verify",
+            return_value=(StreamOutcome(), _mock_verified_spec()),
+        ),
+        patch(
+            "prosuite_mcp.server._make_run_dir", return_value=tmp_path / "run"
+        ) as mock_make_run_dir,
+    ):
+        preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=ConditionRequest(
+                condition="qa3d_constant_z_0",
+                params={"feature_class": "Roads", "tolerance": 0.01},
+            ),
+            datasets=[DatasetRef(name="Roads")],
+            workspace_id="TestModel",
+        )
+
+    assert mock_make_run_dir.call_args[0][0] == "preview"
 
 
 def test_preview_condition_run_forwards_params_to_run_verification():

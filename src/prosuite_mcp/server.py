@@ -595,7 +595,7 @@ def run_verification(
         for cond_req in conditions:
             spec.add_condition(_build_condition(cond_req, dataset_map))
     except ValueError as exc:
-        return {"status": "error", "error": str(exc)}
+        return {"status": "error", "engine_confirmed": False, "error": str(exc)}
 
     perimeter = None
     if envelope:
@@ -667,7 +667,9 @@ def run_xml_verification(
     cfg = load_config()
     if not cfg.spec_path:
         return {
-            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."
+            "status": "error",
+            "engine_confirmed": False,
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path.",
         }
 
     replacements = [
@@ -677,7 +679,11 @@ def run_xml_verification(
     try:
         xml_spec = XmlSpecification(cfg.spec_path, specification_name, replacements)
     except Exception as exc:
-        return {"status": "error", "error": f"Failed to load spec: {exc}"}
+        return {
+            "status": "error",
+            "engine_confirmed": False,
+            "error": f"Failed to load spec: {exc}",
+        }
 
     perimeter = None
     if envelope:

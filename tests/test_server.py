@@ -937,6 +937,76 @@ def test_run_verification_with_output_dir():
 
 
 # ---------------------------------------------------------------------------
+# preview_condition_run
+# ---------------------------------------------------------------------------
+
+
+def test_preview_condition_run_surfaces_flagged_features(tmp_path):
+    from prosuite_mcp.server import preview_condition_run
+
+    spec = _mock_verified_spec()
+    sample = [
+        {"issue_code": "A", "description": "d", "allowable": False, "involved": []},
+    ]
+    outcome = StreamOutcome(
+        total=1, errors=1, counts_by_condition={1: 1}, sample=sample
+    )
+
+    with (
+        patch("prosuite_mcp.server._make_service"),
+        patch("prosuite_mcp.server._run_verify", return_value=(outcome, spec)),
+        patch("prosuite_mcp.server.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=ConditionRequest(
+                condition="qa3d_constant_z_0",
+                params={"feature_class": "Roads", "tolerance": 0.01},
+            ),
+            datasets=[DatasetRef(name="Roads")],
+            workspace_id="TestModel",
+        )
+
+    assert result["status"] == "success"
+    assert result["engine_confirmed"] is True
+    assert result["total_errors"] == 1
+    assert result["sample_features"] == sample
+
+
+def test_preview_condition_run_forwards_params_to_run_verification():
+    from prosuite_mcp.server import preview_condition_run
+
+    cond_req = ConditionRequest(
+        condition="qa3d_constant_z_0",
+        params={"feature_class": "Roads", "tolerance": 0.01},
+    )
+    datasets = [DatasetRef(name="Roads")]
+
+    with patch(
+        "prosuite_mcp.server.run_verification", return_value={"status": "success"}
+    ) as mock_run:
+        result = preview_condition_run(
+            model_catalog_path="C:/test.gdb",
+            condition_request=cond_req,
+            datasets=datasets,
+            workspace_id="TestModel",
+            output_dir="C:/output",
+            envelope={"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
+        )
+
+    mock_run.assert_called_once_with(
+        model_catalog_path="C:/test.gdb",
+        model_name="TestModel",
+        datasets=datasets,
+        conditions=[cond_req],
+        output_dir="C:/output",
+        envelope={"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
+    )
+    assert result == {"status": "success"}
+
+
+# ---------------------------------------------------------------------------
 # describe_spec
 # ---------------------------------------------------------------------------
 

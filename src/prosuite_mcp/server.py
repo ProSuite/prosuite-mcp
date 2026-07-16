@@ -676,6 +676,46 @@ def run_verification(
 
 
 @mcp.tool()
+def preview_condition_run(
+    model_catalog_path: str,
+    condition_request: ConditionRequest,
+    datasets: list[DatasetRef],
+    workspace_id: str,
+    output_dir: str | None = None,
+    envelope: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """Run a single proposed condition ad-hoc and show what it actually flags.
+
+    Tier-2 confirmation for spec authoring: add_condition_to_spec only confirms
+    a condition builds and references an existing descriptor. This runs it for
+    real against model_catalog_path and returns the same engine-confirmed
+    summary as run_verification (engine_confirmed, total_errors,
+    sample_features with the actual flagged issues), so a proposed condition
+    can be judged by what it flags before it's merged into a spec. Scope
+    envelope to a small extent to keep this a preview, not a full run.
+
+    Args:
+        model_catalog_path: Workspace path on the server, e.g.
+            'C:/data/mydb.gdb' or a .sde connection file.
+        condition_request: {condition: method name from list_conditions, params: dict}.
+        datasets: Feature classes/tables used by condition_request, each with
+            'name' and an optional 'filter_expression'.
+        workspace_id: Logical name for the data model (arbitrary, used in
+            generated condition names).
+        output_dir: Optional server-side directory for Issues.gdb and HTML report.
+        envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
+    """
+    return run_verification(
+        model_catalog_path=model_catalog_path,
+        model_name=workspace_id,
+        datasets=datasets,
+        conditions=[condition_request],
+        output_dir=output_dir,
+        envelope=envelope,
+    )
+
+
+@mcp.tool()
 def run_xml_verification(
     specification_name: str,
     data_source_replacements: list[WorkspaceReplacement],

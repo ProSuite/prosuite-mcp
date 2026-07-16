@@ -829,6 +829,7 @@ def test_run_verification_grpc_error(tmp_path):
 
     assert result["status"] == "error"
     assert "unavailable" in result["error"].lower()
+    assert result["engine_confirmed"] is False
 
 
 def test_run_verification_unknown_condition():
@@ -845,6 +846,7 @@ def test_run_verification_unknown_condition():
     )
     assert result["status"] == "error"
     assert "Unknown condition" in result["error"]
+    assert result["engine_confirmed"] is False
 
 
 def test_run_verification_with_output_dir():
@@ -925,8 +927,29 @@ def test_run_xml_verification_no_spec_configured():
             specification_name="Spec_A",
             data_source_replacements=[],
         )
-    assert "error" in result
+    assert result["status"] == "error"
     assert "PROSUITE_SPEC_PATH" in result["error"]
+    assert result["engine_confirmed"] is False
+
+
+def test_run_xml_verification_spec_load_failure():
+    with (
+        patch(
+            "prosuite_mcp.server.load_config",
+            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
+        ),
+        patch(
+            "prosuite_mcp.server.XmlSpecification",
+            side_effect=ValueError("bad spec"),
+        ),
+    ):
+        result = run_xml_verification(
+            specification_name="Spec_A",
+            data_source_replacements=[],
+        )
+    assert result["status"] == "error"
+    assert "Failed to load spec" in result["error"]
+    assert result["engine_confirmed"] is False
 
 
 def test_run_xml_verification_success(tmp_path):
@@ -984,6 +1007,7 @@ def test_run_xml_verification_grpc_error(tmp_path):
 
     assert result["status"] == "error"
     assert "unavailable" in result["error"].lower()
+    assert result["engine_confirmed"] is False
 
 
 def test_run_xml_verification_no_final_summary(tmp_path):

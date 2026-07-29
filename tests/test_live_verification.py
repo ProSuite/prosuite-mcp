@@ -24,7 +24,7 @@ import socket
 import pytest
 
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
-from prosuite_mcp.server import run_verification
+from prosuite_mcp.tools import run_verification
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("PROSUITE_LIVE_TESTS") != "1",

@@ -53,6 +53,28 @@ copilot mcp add prosuite \
   -- uv run prosuite-mcp
 ```
 
+### opencode
+
+Add an `opencode.jsonc` inside `mytest`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "prosuite": {
+      "type": "local",
+      "command": ["uv", "run", "prosuite-mcp"],
+      "enabled": true,
+      "environment": {
+        "PROSUITE_HOST": "localhost",
+        "PROSUITE_PORT": "5151"
+      }
+    }
+  }
+}
+```
+
+Then run `opencode` from inside `mytest`.
 ## Tools
 
 **`load_spec <path>`** — Loads a `.qa.xml` spec file. Call this at the start of a session with the path to your spec (local drive, OneDrive, network share). Replaces any previously loaded spec.

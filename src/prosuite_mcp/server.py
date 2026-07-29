@@ -105,8 +105,9 @@ def search_spec(query: str, max_results: int = 20) -> dict:
     Search the loaded QA spec for conditions matching a natural-language query.
 
     Returns up to max_results conditions whose name, description, or category
-    contains the query string (case-insensitive). Claude bridges any language
-    gap — queries in English, German, French, or Italian all work.
+    contains the query string (case-insensitive, literal substring match, not
+    semantic). Spec content may be in English, German, French, or Italian --
+    query in the same language as the spec to find matches.
 
     Each result includes:
     - name: the full condition name (human-readable rule statement)

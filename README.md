@@ -88,7 +88,13 @@ For those, install `prosuite-mcp` as a standalone tool so it works from any dire
 uv tool install prosuite-mcp
 ```
 
-This puts a `prosuite-mcp` executable on your `PATH`, independent of any project directory. Register that as the command in your client's own MCP configuration format, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables.
+This puts a `prosuite-mcp` executable in `uv`'s tool directory, independent of any project directory. That directory is usually on `PATH` for terminal-launched clients, but GUI apps started from a dock or desktop launcher often run with a narrower environment that doesn't include it, so registering the bare command `prosuite-mcp` may not resolve there. To avoid relying on PATH at all, find the absolute path with:
+
+```bash
+uv tool dir --bin
+```
+
+and register the full path (e.g. `/home/you/.local/bin/prosuite-mcp`) as the command in your client's configuration, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables.
 
 ## Tools
 

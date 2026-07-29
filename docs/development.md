@@ -5,6 +5,7 @@ uv sync --dev
 uv run pytest
 uv run ruff check src
 uv run pyright src
+uv run mdformat --check README.md CONTEXT.md docs/*.md
 ```
 
 ### Live integration test

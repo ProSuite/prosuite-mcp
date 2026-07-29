@@ -27,16 +27,16 @@ Builds a `Specification` programmatically from individual `ConditionRequest` obj
 
 ## Tool Roles
 
-| Tool | When to use |
-|---|---|
-| `describe_spec` | First call in any XML-based workflow; returns available specification names, workspace IDs, and dataset lists |
-| `search_spec` | Browse and filter conditions in the loaded spec by keyword |
-| `run_xml_verification` | Run a named QualitySpecification from the loaded spec, with workspace path substitutions |
-| `list_conditions`, `describe_condition` | Explore the full condition catalog for ad-hoc use |
-| `run_verification` | Ad-hoc verification without a spec |
-| `condition_to_xml` | Preview a single condition's XML in isolation; requires an already-known `test_descriptor` alias |
-| `add_condition_to_spec` | Preview adding a new QualityCondition to a spec, reusing an existing descriptor; returns updated spec XML, never writes a file |
-| `preview_condition_run` | Tier-2 authoring check: run a proposed condition ad-hoc and see what it actually flags, before merging it into a spec |
+| Tool                                    | When to use                                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `describe_spec`                         | First call in any XML-based workflow; returns available specification names, workspace IDs, and dataset lists                  |
+| `search_spec`                           | Browse and filter conditions in the loaded spec by keyword                                                                     |
+| `run_xml_verification`                  | Run a named QualitySpecification from the loaded spec, with workspace path substitutions                                       |
+| `list_conditions`, `describe_condition` | Explore the full condition catalog for ad-hoc use                                                                              |
+| `run_verification`                      | Ad-hoc verification without a spec                                                                                             |
+| `condition_to_xml`                      | Preview a single condition's XML in isolation; requires an already-known `test_descriptor` alias                               |
+| `add_condition_to_spec`                 | Preview adding a new QualityCondition to a spec, reusing an existing descriptor; returns updated spec XML, never writes a file |
+| `preview_condition_run`                 | Tier-2 authoring check: run a proposed condition ad-hoc and see what it actually flags, before merging it into a spec          |
 
 ## Spec Authoring
 

@@ -24,6 +24,9 @@ jobs:
       - name: ruff format check
         run: .venv/bin/ruff format --check .
 
+      - name: mdformat check
+        run: .venv/bin/mdformat --check README.md CONTEXT.md docs/*.md
+
   test:
     runs-on: ubuntu-latest
 

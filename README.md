@@ -8,11 +8,11 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 
 ## Configuration
 
-| Environment variable | Default | Description |
-|---|---|---|
-| `PROSUITE_HOST` | `localhost` | ProSuite service host |
-| `PROSUITE_PORT` | `5151` | ProSuite service port |
-| `PROSUITE_SSL_CERT_PATH` | — | Path to PEM certificate for TLS |
+| Environment variable     | Default     | Description                     |
+| ------------------------ | ----------- | ------------------------------- |
+| `PROSUITE_HOST`          | `localhost` | ProSuite service host           |
+| `PROSUITE_PORT`          | `5151`      | ProSuite service port           |
+| `PROSUITE_SSL_CERT_PATH` | —           | Path to PEM certificate for TLS |
 
 ## Usage
 
@@ -37,14 +37,14 @@ Windows users: see [docs/windows-setup.md](docs/windows-setup.md) for a step-by-
 
 **`run_verification`** — Runs an ad-hoc quality verification against a workspace. Key parameters:
 
-| Parameter | Type | Description |
-|---|---|---|
-| `model_catalog_path` | string | Workspace path on the server (`C:/data/my.gdb`, `.sde` file, …) |
-| `model_name` | string | Logical name for the data model |
-| `datasets` | list | Feature classes/tables: `{name, filter_expression?}` |
-| `conditions` | list | Conditions to run: `{condition, params}` |
-| `output_dir` | string? | Server-side directory for Issues.gdb and HTML report |
-| `envelope` | object? | Spatial filter `{x_min, y_min, x_max, y_max}` |
+| Parameter            | Type    | Description                                                     |
+| -------------------- | ------- | --------------------------------------------------------------- |
+| `model_catalog_path` | string  | Workspace path on the server (`C:/data/my.gdb`, `.sde` file, …) |
+| `model_name`         | string  | Logical name for the data model                                 |
+| `datasets`           | list    | Feature classes/tables: `{name, filter_expression?}`            |
+| `conditions`         | list    | Conditions to run: `{condition, params}`                        |
+| `output_dir`         | string? | Server-side directory for Issues.gdb and HTML report            |
+| `envelope`           | object? | Spatial filter `{x_min, y_min, x_max, y_max}`                   |
 
 Returns a summary with `status`, `total_errors`, and a per-condition breakdown.
 

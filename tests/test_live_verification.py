@@ -32,7 +32,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 _HOST = os.environ.get("PROSUITE_HOST", "localhost")
-_PORT = int(os.environ.get("PROSUITE_PORT", "5151"))
+_PORT = (
+    int(os.environ.get("PROSUITE_PORT", "5151"))
+    if os.environ.get("PROSUITE_LIVE_TESTS") == "1"
+    else 5151
+)
 
 _GDB1_PATH = "C:/ProSuite/TestData/gdb1.gdb"
 

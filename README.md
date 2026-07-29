@@ -96,6 +96,20 @@ uv tool dir --bin
 
 and register the full path (e.g. `/home/you/.local/bin/prosuite-mcp`) as the command in your client's configuration, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables.
 
+`prosuite-mcp` is a normal PyPI package, so plain `pip` works too:
+
+```bash
+pip install --user prosuite-mcp
+```
+
+Find the resulting script's absolute path with:
+
+```bash
+pip show -f prosuite-mcp
+```
+
+which lists it relative to the printed `Location` (e.g. `Location: .../lib/python3.12/site-packages` plus a listed file `../../../bin/prosuite-mcp` resolves to `.../bin/prosuite-mcp`). Register that full path the same way as above.
+
 ## Tools
 
 **`load_spec <path>`** — Loads a `.qa.xml` spec file. Call this at the start of a session with the path to your spec (local drive, OneDrive, network share). Replaces any previously loaded spec.

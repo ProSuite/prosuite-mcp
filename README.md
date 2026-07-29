@@ -75,6 +75,11 @@ Add an `opencode.jsonc` inside `mytest`:
 ```
 
 Then run `opencode` from inside `mytest`.
+
+### Any other MCP client
+
+`prosuite-mcp` is a standard stdio MCP server with no dependency on any particular client: it doesn't know or care which model or coding agent is driving it. Any client that can launch a local process and speak MCP over stdio (Claude Desktop, Cursor, Cline, Continue, Windsurf, etc.) can register it the same way: run `uv run prosuite-mcp` as the command, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables, per your client's own MCP configuration format.
+
 ## Tools
 
 **`load_spec <path>`** — Loads a `.qa.xml` spec file. Call this at the start of a session with the path to your spec (local drive, OneDrive, network share). Replaces any previously loaded spec.

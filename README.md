@@ -78,7 +78,17 @@ Then run `opencode` from inside `mytest`.
 
 ### Any other MCP client
 
-`prosuite-mcp` is a standard stdio MCP server with no dependency on any particular client: it doesn't know or care which model or coding agent is driving it. Any client that can launch a local process and speak MCP over stdio (Claude Desktop, Cursor, Cline, Continue, Windsurf, etc.) can register it the same way: run `uv run prosuite-mcp` as the command, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables, per your client's own MCP configuration format.
+`prosuite-mcp` is a standard stdio MCP server with no dependency on any particular client: it doesn't know or care which model or coding agent is driving it.
+
+`uv run prosuite-mcp`, as used in the examples above, only works when launched from inside the `mytest` project directory: that's how `uv run` finds the right `.venv`. Claude Code, Copilot CLI, and opencode all launch the server from a project directory you invoke them from, so this works there. Many other clients (Claude Desktop and other GUI apps in particular) launch the server's command from their own working directory instead, where `uv run prosuite-mcp` would fail to find the project at all.
+
+For those, install `prosuite-mcp` as a standalone tool so it works from any directory:
+
+```bash
+uv tool install prosuite-mcp
+```
+
+This puts a `prosuite-mcp` executable on your `PATH`, independent of any project directory. Register that as the command in your client's own MCP configuration format, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables.
 
 ## Tools
 

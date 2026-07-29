@@ -24,7 +24,7 @@ claude --version
 
 ## PowerShell note
 
-The README uses bash syntax. In PowerShell, replace the backslash line-continuation character (`\`) with a backtick (`` ` ``). For example:
+[docs/cli-clients.md](cli-clients.md) uses bash syntax. In PowerShell, replace the backslash line-continuation character (`\`) with a backtick (`` ` ``). For example:
 
 ```powershell
 claude mcp add prosuite `

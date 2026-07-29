@@ -1,6 +1,6 @@
 # Windows Setup
 
-Install the two prerequisites below, then return to the [README](../README.md) and follow the Usage section.
+Install the two prerequisites below, then follow [docs/cli-clients.md](cli-clients.md).
 
 ## 1. Install uv
 

@@ -2,7 +2,7 @@
 
 The write-side counterpart to spec.py: spec.py reads/searches an existing
 spec, this module builds new <QualityCondition> fragments and appends them to
-a spec's XML. Nothing here writes to disk — callers decide separately whether
+a spec's XML. Nothing here writes to disk; callers decide separately whether
 and how to persist the returned XML.
 """
 

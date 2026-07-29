@@ -1,7 +1,7 @@
 """Pydantic request schemas for MCP tool parameters.
 
 Plain data carriers for validating tool-call input, not domain or persistence
-models — see prosuite.data_model.Model for ProSuite's own, unrelated "Model"
+models. See prosuite.data_model.Model for ProSuite's own, unrelated "Model"
 concept.
 """
 

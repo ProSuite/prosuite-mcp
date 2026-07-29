@@ -1,6 +1,6 @@
 """Run ProSuite verifications over gRPC and shape the results.
 
-Pure "call ProSuite, aggregate the stream, summarize" — no MCP/FastMCP
+Pure "call ProSuite, aggregate the stream, summarize", no MCP/FastMCP
 concerns, so this is testable with a fake Service.
 """
 

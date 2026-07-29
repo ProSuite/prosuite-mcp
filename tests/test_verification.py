@@ -1,4 +1,4 @@
-"""Unit tests for running verifications and shaping results — gRPC is mocked."""
+"""Unit tests for running verifications and shaping results. gRPC is mocked."""
 
 from types import SimpleNamespace
 from unittest.mock import patch

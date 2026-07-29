@@ -293,7 +293,7 @@ def test_search_result_description_surfaced(conditions):
 def test_search_spec_tool_no_spec_configured():
     from prosuite_mcp.server import search_spec as tool_search_spec
 
-    with patch("prosuite_mcp.server._get_spec", return_value=None):
+    with patch("prosuite_mcp.server.get_loaded_conditions", return_value=None):
         result = tool_search_spec("roads")
     assert "error" in result
     assert "PROSUITE_SPEC_PATH" in result["error"]
@@ -302,7 +302,7 @@ def test_search_spec_tool_no_spec_configured():
 def test_search_spec_tool_with_spec(conditions):
     from prosuite_mcp.server import search_spec as tool_search_spec
 
-    with patch("prosuite_mcp.server._get_spec", return_value=conditions):
+    with patch("prosuite_mcp.server.get_loaded_conditions", return_value=conditions):
         result = tool_search_spec("minimum length")
     assert result["total_matches"] == 1
 

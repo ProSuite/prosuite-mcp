@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
 from .catalog import CATALOG
+from .config import load_config
 
 _NS = {"qa": "urn:ProSuite.QA.QualitySpecifications-3.0"}
 
@@ -279,3 +280,22 @@ def search_spec(
         "returned": len(results),
         "results": results,
     }
+
+
+_loaded_conditions: list[SpecCondition] | None = None
+
+
+def set_spec(conditions: list[SpecCondition]) -> None:
+    """Replace the currently loaded spec, e.g. after the load_spec tool call."""
+    global _loaded_conditions
+    _loaded_conditions = conditions
+
+
+def get_loaded_conditions() -> list[SpecCondition] | None:
+    """Return the currently loaded spec, lazily loading PROSUITE_SPEC_PATH on first use."""
+    global _loaded_conditions
+    if _loaded_conditions is None:
+        cfg = load_config()
+        if cfg.spec_path:
+            _loaded_conditions = load_spec(cfg.spec_path)
+    return _loaded_conditions

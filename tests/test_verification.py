@@ -351,6 +351,19 @@ def test_run_verification_impl_unknown_condition():
     assert result["engine_confirmed"] is False
 
 
+def test_run_verification_impl_does_not_create_dir_on_invalid_condition():
+    # Condition validation happens before _make_run_dir is reached, so a
+    # rejected request must not leave a timestamped directory behind. Not
+    # preview-specific -- both run_dir_prefix values share this ordering.
+    with patch("prosuite_mcp.verification._make_run_dir") as mock_make_run_dir:
+        result = _run_adhoc(
+            conditions=[ConditionRequest(condition="no_such_condition_xyz", params={})]
+        )
+
+    assert result["status"] == "error"
+    mock_make_run_dir.assert_not_called()
+
+
 def test_run_verification_impl_with_output_dir():
     final_spec = _mock_verified_spec()
 

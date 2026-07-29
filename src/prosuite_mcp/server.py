@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import grpc
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from prosuite import EnvelopePerimeter, Service
 from prosuite.data_model import Dataset, Model
 from prosuite.factories.quality_conditions import Conditions
@@ -22,7 +22,7 @@ from .spec import _NS, SpecCondition, get_spec_metadata
 from .spec import load_spec as _load_spec
 from .spec import search_spec as _search_spec
 
-mcp = FastMCP(
+mcp = MCPServer(
     "ProSuite MCP",
     instructions="MCP server for Dira ProSuite quality verification",
 )

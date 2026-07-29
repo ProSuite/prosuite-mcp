@@ -11,7 +11,7 @@ import pytest
 
 from prosuite_mcp.catalog import CATALOG
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
-from prosuite_mcp.server import (
+from prosuite_mcp.tools import (
     add_condition_to_spec,
     condition_to_xml,
     describe_condition,
@@ -126,7 +126,7 @@ def test_load_spec_success(tmp_path):
 
 def test_load_spec_makes_search_work(tmp_path):
     import prosuite_mcp.spec as spec_module
-    from prosuite_mcp.server import search_spec as tool_search_spec
+    from prosuite_mcp.tools import search_spec as tool_search_spec
 
     spec_file = tmp_path / "test.qa.xml"
     spec_file.write_text(_MINIMAL_XML, encoding="utf-8")
@@ -146,7 +146,7 @@ def test_load_spec_makes_search_work(tmp_path):
 
 
 def test_describe_spec_no_spec_configured():
-    with patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path=None)):
+    with patch("prosuite_mcp.tools.load_config", return_value=_cfg(spec_path=None)):
         result = describe_spec()
     assert "error" in result
     assert "PROSUITE_SPEC_PATH" in result["error"]
@@ -156,10 +156,10 @@ def test_describe_spec_returns_metadata():
     fake_meta = {"specifications": [], "workspaces": []}
     with (
         patch(
-            "prosuite_mcp.server.load_config",
+            "prosuite_mcp.tools.load_config",
             return_value=_cfg(spec_path="/tmp/x.qa.xml"),
         ),
-        patch("prosuite_mcp.server.get_spec_metadata", return_value=fake_meta),
+        patch("prosuite_mcp.tools.get_spec_metadata", return_value=fake_meta),
     ):
         result = describe_spec()
     assert result == fake_meta
@@ -234,7 +234,7 @@ def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(tmp_path)
 
     with (
         patch(
-            "prosuite_mcp.server.load_config",
+            "prosuite_mcp.tools.load_config",
             return_value=_cfg(spec_path=str(spec_file)),
         ),
         patch(
@@ -257,7 +257,7 @@ def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(tmp_path)
 
 
 def test_add_condition_to_spec_raises_without_spec_xml_or_configured_path():
-    with patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path=None)):
+    with patch("prosuite_mcp.tools.load_config", return_value=_cfg(spec_path=None)):
         with pytest.raises(ValueError, match="No spec loaded"):
             add_condition_to_spec(
                 target_specification_name="MySpec",
@@ -273,7 +273,7 @@ def test_add_condition_to_spec_raises_without_spec_xml_or_configured_path():
 
 def test_add_condition_to_spec_raises_value_error_when_configured_path_missing():
     with patch(
-        "prosuite_mcp.server.load_config",
+        "prosuite_mcp.tools.load_config",
         return_value=_cfg(spec_path="/does/not/exist.qa.xml"),
     ):
         with pytest.raises(ValueError, match="Could not read spec file"):
@@ -364,7 +364,7 @@ def test_preview_condition_run_forwards_params_to_shared_impl():
 
 
 def test_run_xml_verification_no_spec_configured():
-    with patch("prosuite_mcp.server.load_config", return_value=_cfg(spec_path=None)):
+    with patch("prosuite_mcp.tools.load_config", return_value=_cfg(spec_path=None)):
         result = run_xml_verification(
             specification_name="Spec_A",
             data_source_replacements=[],
@@ -379,7 +379,7 @@ def test_run_xml_verification_delegates_to_verification_impl():
 
     with (
         patch(
-            "prosuite_mcp.server.load_config",
+            "prosuite_mcp.tools.load_config",
             return_value=_cfg(spec_path="/tmp/x.qa.xml"),
         ),
         patch(

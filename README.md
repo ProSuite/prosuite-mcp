@@ -18,97 +18,8 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 
 Windows users: see [docs/windows-setup.md](docs/windows-setup.md) for a step-by-step guide including uv and Claude Code installation.
 
-Both options below assume you create a project directory first:
-
-```bash
-mkdir mytest
-cd mytest
-uv init --python 3.12
-uv add prosuite-mcp
-```
-
-### Claude Code CLI
-
-Register the server from inside `mytest`, then start Claude:
-
-```bash
-claude mcp add prosuite \
-  -e PROSUITE_HOST=localhost \
-  -e PROSUITE_PORT=5151 \
-  -- uv run prosuite-mcp
-
-claude
-```
-
-The `-- uv run prosuite-mcp` tells Claude Code to start the MCP server via `uv run` in the current project, so prosuite-mcp is resolved from the local `.venv`. Run `claude` from the same `mytest` directory each time.
-
-### Copilot CLI
-
-Register the server from inside `mytest`, then start Copilot:
-
-```bash
-copilot mcp add prosuite \
-  -e PROSUITE_HOST=localhost \
-  -e PROSUITE_PORT=5151 \
-  -- uv run prosuite-mcp
-```
-
-### opencode
-
-Add an `opencode.jsonc` inside `mytest`:
-
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "prosuite": {
-      "type": "local",
-      "command": ["uv", "run", "prosuite-mcp"],
-      "enabled": true,
-      "environment": {
-        "PROSUITE_HOST": "localhost",
-        "PROSUITE_PORT": "5151"
-      }
-    }
-  }
-}
-```
-
-Then run `opencode` from inside `mytest`.
-
-### Any other MCP client
-
-`prosuite-mcp` is a standard stdio MCP server with no dependency on any particular client: it doesn't know or care which model or coding agent is driving it.
-
-`uv run prosuite-mcp`, as used in the examples above, only works when launched from inside the `mytest` project directory: that's how `uv run` finds the right `.venv`. Claude Code, Copilot CLI, and opencode all launch the server from a project directory you invoke them from, so this works there. Many other clients (Claude Desktop and other GUI apps in particular) launch the server's command from their own working directory instead, where `uv run prosuite-mcp` would fail to find the project at all.
-
-For those, install `prosuite-mcp` as a standalone tool so it works from any directory:
-
-```bash
-uv tool install prosuite-mcp
-```
-
-This puts a `prosuite-mcp` executable in `uv`'s tool directory, independent of any project directory. That directory is usually on `PATH` for terminal-launched clients, but GUI apps started from a dock or desktop launcher often run with a narrower environment that doesn't include it, so registering the bare command `prosuite-mcp` may not resolve there. To avoid relying on PATH at all, find the absolute path with:
-
-```bash
-uv tool dir --bin
-```
-
-and register the full path (e.g. `/home/you/.local/bin/prosuite-mcp`) as the command in your client's configuration, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables.
-
-`prosuite-mcp` is a normal PyPI package, so plain `pip` works too:
-
-```bash
-pip install --user prosuite-mcp
-```
-
-Find the resulting script's absolute path with:
-
-```bash
-pip show -f prosuite-mcp
-```
-
-which lists it relative to the printed `Location` (e.g. `Location: .../lib/python3.12/site-packages` plus a listed file `../../../bin/prosuite-mcp` resolves to `.../bin/prosuite-mcp`). Register that full path the same way as above.
+- CLI coding agents (Claude Code, Copilot CLI, opencode): see [docs/cli-clients.md](docs/cli-clients.md)
+- Any other MCP client (Claude Desktop, other GUI apps, or anything else): see [docs/gui-clients.md](docs/gui-clients.md)
 
 ## Tools
 
@@ -155,26 +66,7 @@ Without a spec, Claude uses `list_conditions` and `describe_condition` to find a
 
 ## Development
 
-```bash
-uv sync --dev
-uv run pytest
-uv run ruff check src
-uv run pyright src
-```
-
-### Live integration test
-
-`tests/test_live_verification.py` runs a real verification against an actual ProSuite gRPC service instead of a mocked one. It exists to catch drift between the real service's response shape and what `prosuite_mcp.verification` assumes — something a fully mocked suite can't do by construction.
-
-It's skipped by default (`pytest` / CI never runs it) because it depends on network access to a real ProSuite service, which not every contributor or CI environment has, and this repo never hardcodes an address for one. Opt in explicitly, pointing at your own reachable service:
-
-```bash
-PROSUITE_LIVE_TESTS=1 PROSUITE_HOST=<host> PROSUITE_PORT=<port> uv run pytest tests/test_live_verification.py -v
-```
-
-It expects a plain file geodatabase named `gdb1.gdb` (feature classes `lines`/`points`/`polygons`) to exist on that server; adjust `_GDB1_PATH` in the test if yours keeps it elsewhere.
-
-If you want it to run every time you run the full suite on your own machine, export `PROSUITE_LIVE_TESTS`, `PROSUITE_HOST`, and `PROSUITE_PORT` in your shell profile (or a local, uncommitted `.env`) rather than changing the default — that keeps `main`'s default test run hermetic for everyone else while making it effectively always-on for you.
+See [docs/development.md](docs/development.md).
 
 ## License
 

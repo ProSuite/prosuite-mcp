@@ -23,7 +23,7 @@ Windows users: see [docs/windows-setup.md](docs/windows-setup.md) for a step-by-
 
 ## Tools
 
-Every tool is defined in [`src/prosuite_mcp/tools.py`](src/prosuite_mcp/tools.py): its docstring is the authoritative description, the same one your MCP client shows the LLM, so it's always accurate and never out of sync with a separate copy here.
+Every tool is defined in [`src/prosuite_mcp/tools.py`](src/prosuite_mcp/tools.py): its docstring is the authoritative description, the same one your MCP client shows the LLM.
 
 ### Example
 

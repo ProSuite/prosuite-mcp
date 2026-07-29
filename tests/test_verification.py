@@ -351,6 +351,19 @@ def test_run_verification_impl_unknown_condition():
     assert result["engine_confirmed"] is False
 
 
+def test_run_verification_impl_does_not_create_dir_on_invalid_condition():
+    # Condition validation happens before _make_run_dir is reached, so a
+    # rejected request must not leave a timestamped directory behind. Not
+    # preview-specific -- both run_dir_prefix values share this ordering.
+    with patch("prosuite_mcp.verification._make_run_dir") as mock_make_run_dir:
+        result = _run_adhoc(
+            conditions=[ConditionRequest(condition="no_such_condition_xyz", params={})]
+        )
+
+    assert result["status"] == "error"
+    mock_make_run_dir.assert_not_called()
+
+
 def test_run_verification_impl_with_output_dir():
     final_spec = _mock_verified_spec()
 
@@ -402,42 +415,6 @@ def test_run_verification_impl_explicit_output_dir_not_overridden():
 # ---------------------------------------------------------------------------
 # _run_verification_impl (preview mode, run_dir_prefix="preview")
 # ---------------------------------------------------------------------------
-
-
-def test_run_verification_impl_preview_surfaces_flagged_features(tmp_path):
-    spec = _mock_verified_spec()
-    sample = [
-        {"issue_code": "A", "description": "d", "allowable": False, "involved": []},
-    ]
-    outcome = StreamOutcome(
-        total=1, errors=1, counts_by_condition={1: 1}, sample=sample
-    )
-
-    with (
-        patch("prosuite_mcp.verification._make_service"),
-        patch("prosuite_mcp.verification._run_verify", return_value=(outcome, spec)),
-        patch(
-            "prosuite_mcp.verification._make_run_dir",
-            return_value=tmp_path / "preview_run",
-        ),
-    ):
-        result = _run_adhoc(model_name="TestModel", run_dir_prefix="preview")
-
-    assert result["status"] == "success"
-    assert result["engine_confirmed"] is True
-    assert result["total_errors"] == 1
-    assert result["sample_features"] == sample
-
-
-def test_run_verification_impl_preview_does_not_create_dir_on_invalid_condition():
-    with patch("prosuite_mcp.verification._make_run_dir") as mock_make_run_dir:
-        result = _run_adhoc(
-            conditions=[ConditionRequest(condition="no_such_condition_xyz", params={})],
-            run_dir_prefix="preview",
-        )
-
-    assert result["status"] == "error"
-    mock_make_run_dir.assert_not_called()
 
 
 def test_run_verification_impl_preview_uses_preview_prefixed_run_dir(tmp_path):

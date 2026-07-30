@@ -7,9 +7,8 @@ from mcp.server.mcpserver import MCPServer
 
 from . import authoring, verification
 from .catalog import CATALOG
-from .config import load_config
 from .schemas import ConditionRequest, DatasetRef, WorkspaceReplacement
-from .spec import get_loaded_conditions, get_spec_metadata, set_spec
+from .spec import get_loaded_conditions, get_spec_metadata, get_spec_path, set_spec
 from .spec import load_spec as _load_spec
 from .spec import search_spec as _search_spec
 
@@ -86,15 +85,16 @@ def describe_spec() -> dict:
     - Which workspace_id values need to be replaced with real paths
     - Which datasets each specification expects (useful for sanity-checking the workspace)
 
-    Requires PROSUITE_SPEC_PATH to be configured.
+    Describes whichever spec is active: the one load_spec was last called with,
+    otherwise PROSUITE_SPEC_PATH.
     """
-    cfg = load_config()
-    if not cfg.spec_path:
+    path = get_spec_path()
+    if not path:
         return {
-            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path."
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first."
         }
     try:
-        return get_spec_metadata(cfg.spec_path)
+        return get_spec_metadata(path)
     except Exception as exc:
         return {"error": f"Failed to read spec: {exc}"}
 
@@ -118,8 +118,8 @@ def search_spec(query: str, max_results: int = 20) -> dict:
     - required_datasets: dataset names and filter expressions to include in
       run_verification's datasets list
 
-    Requires PROSUITE_SPEC_PATH to be configured. Returns an error dict if
-    no spec is loaded.
+    Searches whichever spec is active: the one load_spec was last called with,
+    otherwise PROSUITE_SPEC_PATH. Returns an error dict if neither is set.
     """
     conditions = get_loaded_conditions()
     if conditions is None:
@@ -134,9 +134,11 @@ def load_spec(path: str) -> dict:
     """
     Load a .qa.xml spec file at runtime.
 
-    Replaces any previously loaded spec so that subsequent search_spec calls
-    use the new file. Use this when the spec path is only known at conversation
-    time (e.g. a file on OneDrive or a network share) instead of pre-configuring
+    Replaces any previously loaded spec, and takes precedence over
+    PROSUITE_SPEC_PATH, so every subsequent spec tool (search_spec,
+    describe_spec, add_condition_to_spec, run_xml_verification) uses the new
+    file. Use this when the spec path is only known at conversation time
+    (e.g. a file on OneDrive or a network share) instead of pre-configuring
     PROSUITE_SPEC_PATH.
 
     Args:
@@ -151,7 +153,7 @@ def load_spec(path: str) -> dict:
         loaded = _load_spec(path)
     except Exception as exc:
         return {"error": f"Failed to parse spec: {exc}"}
-    set_spec(loaded)
+    set_spec(path, loaded)
     return {"status": "ok", "conditions_loaded": len(loaded), "path": path}
 
 
@@ -224,24 +226,22 @@ def add_condition_to_spec(
         workspace_id: Logical workspace id to bind datasets to (e.g. "DATA_OSM").
         allow_errors: Whether issues from this condition are tolerated.
         description: Optional description element.
-        spec_xml: Spec XML text; defaults to reading the configured/loaded
-            spec path if omitted.
+        spec_xml: Spec XML text; defaults to reading the active spec (the one
+            load_spec was last called with, otherwise PROSUITE_SPEC_PATH).
 
     Returns the updated spec XML, ready to review and persist yourself.
     """
     if spec_xml is None:
-        cfg = load_config()
-        if not cfg.spec_path:
+        path = get_spec_path()
+        if not path:
             raise ValueError(
-                "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path, "
-                "call load_spec first, or pass spec_xml explicitly."
+                "No spec loaded. Set PROSUITE_SPEC_PATH, call load_spec first, "
+                "or pass spec_xml explicitly."
             )
         try:
-            spec_xml = Path(cfg.spec_path).read_text(encoding="utf-8")
+            spec_xml = Path(path).read_text(encoding="utf-8")
         except OSError as exc:
-            raise ValueError(
-                f"Could not read spec file {cfg.spec_path!r}: {exc}"
-            ) from exc
+            raise ValueError(f"Could not read spec file {path!r}: {exc}") from exc
 
     return authoring.add_condition(
         target_specification_name,
@@ -375,14 +375,15 @@ def run_xml_verification(
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
 
     Returns a summary with status, total_errors, and per-condition breakdown.
-    Requires PROSUITE_SPEC_PATH to be configured.
+    Runs whichever spec is active: the one load_spec was last called with,
+    otherwise PROSUITE_SPEC_PATH.
     """
-    cfg = load_config()
-    if not cfg.spec_path:
+    path = get_spec_path()
+    if not path:
         return {
             "status": "error",
             "engine_confirmed": False,
-            "error": "No spec loaded. Set PROSUITE_SPEC_PATH to a .qa.xml file path.",
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first.",
         }
 
     replacements = [
@@ -390,7 +391,7 @@ def run_xml_verification(
     ]
 
     return verification.run_xml_verification_impl(
-        cfg.spec_path,
+        path,
         specification_name,
         replacements,
         output_dir,

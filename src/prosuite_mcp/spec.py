@@ -282,20 +282,34 @@ def search_spec(
     }
 
 
+# The active spec is identified by its path, not by its parsed conditions.
+# Each consumer needs something different from it (parsed conditions to search,
+# a path to hand XmlSpecification, the raw text to author against), so the path
+# is what they have to agree on. Resolving it in one place is what stops
+# load_spec from switching the spec for some tools but not others.
+_active_spec_path: str | None = None
 _loaded_conditions: list[SpecCondition] | None = None
 
 
-def set_spec(conditions: list[SpecCondition]) -> None:
-    """Replace the currently loaded spec, e.g. after the load_spec tool call."""
-    global _loaded_conditions
+def set_spec(path: str, conditions: list[SpecCondition]) -> None:
+    """Make path the active spec, replacing any previously loaded one."""
+    global _active_spec_path, _loaded_conditions
+    _active_spec_path = path
     _loaded_conditions = conditions
 
 
+def get_spec_path() -> str | None:
+    """Path of the active spec: whatever load_spec set, else PROSUITE_SPEC_PATH."""
+    if _active_spec_path is not None:
+        return _active_spec_path
+    return load_config().spec_path
+
+
 def get_loaded_conditions() -> list[SpecCondition] | None:
-    """Return the currently loaded spec, lazily loading PROSUITE_SPEC_PATH on first use."""
+    """Conditions of the active spec, parsed lazily on first use."""
     global _loaded_conditions
     if _loaded_conditions is None:
-        cfg = load_config()
-        if cfg.spec_path:
-            _loaded_conditions = load_spec(cfg.spec_path)
+        path = get_spec_path()
+        if path:
+            _loaded_conditions = load_spec(path)
     return _loaded_conditions

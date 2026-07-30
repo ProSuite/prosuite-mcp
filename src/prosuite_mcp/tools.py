@@ -18,6 +18,12 @@ mcp = MCPServer(
 )
 
 
+def _error(message: str) -> dict[str, Any]:
+    """Every tool that returns a dict reports failure this way, so a caller can
+    check status without knowing which tool it called."""
+    return {"status": "error", "error": message}
+
+
 @mcp.tool()
 def list_conditions(search: str = "") -> str:
     """
@@ -90,17 +96,15 @@ def describe_spec() -> dict:
     - Which datasets each specification expects (useful for sanity-checking the workspace)
 
     Describes whichever spec is active: the one load_spec was last called with,
-    otherwise PROSUITE_SPEC_PATH.
+    otherwise PROSUITE_SPEC_PATH. Returns 'status': 'ok' or 'error'.
     """
     path = get_spec_path()
     if not path:
-        return {
-            "error": "No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first."
-        }
+        return _error("No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first.")
     try:
-        return get_spec_metadata(path)
+        return {"status": "ok", **get_spec_metadata(path)}
     except Exception as exc:
-        return {"error": f"Failed to read spec: {exc}"}
+        return _error(f"Failed to read spec: {exc}")
 
 
 @mcp.tool()
@@ -123,14 +127,12 @@ def search_spec(query: str, max_results: int = 20) -> dict:
       run_verification's datasets list
 
     Searches whichever spec is active: the one load_spec was last called with,
-    otherwise PROSUITE_SPEC_PATH. Returns an error dict if neither is set.
+    otherwise PROSUITE_SPEC_PATH. Returns 'status': 'ok' or 'error'.
     """
     conditions = get_loaded_conditions()
     if conditions is None:
-        return {
-            "error": "No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first."
-        }
-    return _search_spec(conditions, query, max_results=max_results)
+        return _error("No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first.")
+    return {"status": "ok", **_search_spec(conditions, query, max_results=max_results)}
 
 
 @mcp.tool()
@@ -148,15 +150,15 @@ def load_spec(path: str) -> dict:
     Args:
         path: Absolute path to the .qa.xml spec file on the local machine.
 
-    Returns a dict with 'conditions_loaded' on success, or 'error' on failure.
+    Returns 'status': 'ok' with 'conditions_loaded', or 'status': 'error'.
     """
     p = Path(path)
     if not p.exists():
-        return {"error": f"File not found: {path}"}
+        return _error(f"File not found: {path}")
     try:
         loaded = _load_spec(path)
     except Exception as exc:
-        return {"error": f"Failed to parse spec: {exc}"}
+        return _error(f"Failed to parse spec: {exc}")
     set_spec(path, loaded)
     return {"status": "ok", "conditions_loaded": len(loaded), "path": path}
 
@@ -171,7 +173,7 @@ def add_condition_to_spec(
     allow_errors: bool = False,
     description: str = "",
     spec_xml: str | None = None,
-) -> str:
+) -> dict[str, Any]:
     """Preview adding a new QualityCondition to a spec, reusing an existing descriptor.
 
     Builds the condition through the same prosuite factory as run_verification,
@@ -192,30 +194,36 @@ def add_condition_to_spec(
         spec_xml: Spec XML text; defaults to reading the active spec (the one
             load_spec was last called with, otherwise PROSUITE_SPEC_PATH).
 
-    Returns the updated spec XML, ready to review and persist yourself.
+    Returns 'status': 'ok' with 'spec_xml' holding the updated spec, ready to
+    review and persist yourself, or 'status': 'error'.
     """
     if spec_xml is None:
         path = get_spec_path()
         if not path:
-            raise ValueError(
+            return _error(
                 "No spec loaded. Set PROSUITE_SPEC_PATH, call load_spec first, "
                 "or pass spec_xml explicitly."
             )
         try:
             spec_xml = Path(path).read_text(encoding="utf-8")
         except OSError as exc:
-            raise ValueError(f"Could not read spec file {path!r}: {exc}") from exc
+            return _error(f"Could not read spec file {path!r}: {exc}")
 
-    return authoring.add_condition(
-        target_specification_name,
-        name,
-        condition_request,
-        datasets,
-        workspace_id,
-        spec_xml,
-        allow_errors,
-        description,
-    )
+    try:
+        updated = authoring.add_condition(
+            target_specification_name,
+            name,
+            condition_request,
+            datasets,
+            workspace_id,
+            spec_xml,
+            allow_errors,
+            description,
+        )
+    except ValueError as exc:
+        return _error(str(exc))
+
+    return {"status": "ok", "spec_xml": updated}
 
 
 @mcp.tool()

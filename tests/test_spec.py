@@ -309,6 +309,11 @@ def test_search_spec_tool_with_spec(conditions):
 
 # ---------------------------------------------------------------------------
 # get_spec_metadata
+#
+# Cond_B sits inside <Categories> and Cond_A at the document root on purpose:
+# real spec files nest conditions under categories (see _XML above), and
+# get_spec_metadata used to read only the root-level <QualityConditions>, so it
+# reported empty workspace_ids and datasets for exactly the specs people have.
 # ---------------------------------------------------------------------------
 
 _METADATA_XML = textwrap.dedent("""\
@@ -318,16 +323,22 @@ _METADATA_XML = textwrap.dedent("""\
         <Workspace id="DATA_OSM" modelName="MyModel" />
         <Workspace id="DATA_REF" modelName="RefModel" />
       </Workspaces>
+      <Categories>
+        <Category name="Buildings">
+          <QualityConditions>
+            <QualityCondition name="Cond_B">
+              <Parameters>
+                <Dataset parameter="fc" workspace="DATA_OSM" value="BUILDINGS" />
+                <Dataset parameter="other" workspace="DATA_REF" value="PARCELS" />
+              </Parameters>
+            </QualityCondition>
+          </QualityConditions>
+        </Category>
+      </Categories>
       <QualityConditions>
         <QualityCondition name="Cond_A">
           <Parameters>
             <Dataset parameter="fc" workspace="DATA_OSM" value="ROADS" />
-          </Parameters>
-        </QualityCondition>
-        <QualityCondition name="Cond_B">
-          <Parameters>
-            <Dataset parameter="fc" workspace="DATA_OSM" value="BUILDINGS" />
-            <Dataset parameter="other" workspace="DATA_REF" value="PARCELS" />
           </Parameters>
         </QualityCondition>
       </QualityConditions>
@@ -400,6 +411,16 @@ def test_metadata_datasets_per_spec(metadata):
         s for s in metadata["specifications"] if s["specification_name"] == "Spec_B"
     )
     assert spec_b["datasets"] == ["BUILDINGS", "PARCELS", "ROADS"]
+
+
+def test_metadata_finds_conditions_nested_in_categories(metadata):
+    """Workspace ids are what run_xml_verification needs, so missing a
+    category-nested condition silently strips a required replacement."""
+    spec_b = next(
+        s for s in metadata["specifications"] if s["specification_name"] == "Spec_B"
+    )
+    assert "DATA_REF" in spec_b["workspace_ids"]
+    assert "PARCELS" in spec_b["datasets"]
 
 
 def test_metadata_empty_xml_no_crash(tmp_path):

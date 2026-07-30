@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from .catalog import CATALOG
 from .config import load_config
 
-_NS = {"qa": "urn:ProSuite.QA.QualitySpecifications-3.0"}
+NS = {"qa": "urn:ProSuite.QA.QualitySpecifications-3.0"}
 
 
 @dataclass
@@ -126,7 +126,7 @@ def _parse_condition(
     else:
         allow_errors = (descriptor_allow_errors or {}).get(descriptor, False)
 
-    desc_el = cond_el.find("qa:Description", _NS)
+    desc_el = cond_el.find("qa:Description", NS)
     description = (desc_el.text or "").strip() if desc_el is not None else ""
 
     method = _descriptor_to_method(descriptor)
@@ -135,7 +135,7 @@ def _parse_condition(
     scalar_params: list[ScalarParam] = []
     has_transformer = False
 
-    params_el = cond_el.find("qa:Parameters", _NS)
+    params_el = cond_el.find("qa:Parameters", NS)
     if params_el is not None:
         for p in params_el:
             tag = p.tag.split("}")[-1]
@@ -203,7 +203,7 @@ def _descriptor_allow_errors(root: ET.Element) -> dict[str, bool]:
     return {
         td.get("name", ""): td.get("allowErrors", "false").strip().lower()
         in {"true", "1"}
-        for td in root.iter(f"{{{_NS['qa']}}}TestDescriptor")
+        for td in root.iter(f"{{{NS['qa']}}}TestDescriptor")
     }
 
 
@@ -222,7 +222,7 @@ def get_spec_metadata(path: str) -> dict:
     root = tree.getroot()
 
     workspaces: dict[str, dict] = {}
-    ws_el = root.find("qa:Workspaces", _NS)
+    ws_el = root.find("qa:Workspaces", NS)
     if ws_el is not None:
         for ws in ws_el:
             wid = ws.get("id", "")
@@ -243,7 +243,7 @@ def get_spec_metadata(path: str) -> dict:
     for cond, _category in pairs:
         ws_ids: set[str] = set()
         ds_names: set[str] = set()
-        params_el = cond.find("qa:Parameters", _NS)
+        params_el = cond.find("qa:Parameters", NS)
         if params_el is not None:
             for p in params_el:
                 if p.tag.split("}")[-1] == "Dataset":
@@ -256,10 +256,10 @@ def get_spec_metadata(path: str) -> dict:
         condition_refs[cond.get("name", "")] = (ws_ids, ds_names)
 
     specs = []
-    for spec_el in root.iter(f"{{{_NS['qa']}}}QualitySpecification"):
+    for spec_el in root.iter(f"{{{NS['qa']}}}QualitySpecification"):
         sname = spec_el.get("name", "")
         cond_names: list[str] = []
-        elements_el = spec_el.find("qa:Elements", _NS)
+        elements_el = spec_el.find("qa:Elements", NS)
         if elements_el is not None:
             for el in elements_el:
                 cref = el.get("qualityCondition", "")

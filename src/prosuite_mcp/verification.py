@@ -19,7 +19,7 @@ from prosuite.data_model import Dataset, Model
 from prosuite.quality import Specification, XmlSpecification
 from prosuite.verification import ServiceStatus, VerifiedSpecification
 
-from .authoring import _build_condition
+from .authoring import build_condition
 from .config import load_config
 from .schemas import ConditionRequest, DatasetRef
 
@@ -234,7 +234,7 @@ def _verify_and_summarize(
     return summary
 
 
-def _run_verification_impl(
+def run_verification_impl(
     model_catalog_path: str,
     model_name: str,
     datasets: list[DatasetRef],
@@ -251,7 +251,7 @@ def _run_verification_impl(
 
         spec = Specification(name="prosuite-mcp verification")
         for cond_req in conditions:
-            spec.add_condition(_build_condition(cond_req, dataset_map))
+            spec.add_condition(build_condition(cond_req, dataset_map))
     except ValueError as exc:
         return {"status": "error", "engine_confirmed": False, "error": str(exc)}
 

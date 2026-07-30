@@ -15,10 +15,10 @@ from prosuite_mcp.verification import (
     StreamOutcome,
     _decode_issue,
     _make_run_dir,
-    _run_verification_impl,
     _run_verify,
     _service_is_local,
     _summarize,
+    run_verification_impl,
     run_xml_verification_impl,
 )
 
@@ -266,7 +266,7 @@ def test_make_run_dir_sanitizes_spaces_and_special_chars(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _run_verification_impl (ad-hoc mode, shared by run_verification /
+# run_verification_impl (ad-hoc mode, shared by run_verification /
 # preview_condition_run)
 # ---------------------------------------------------------------------------
 
@@ -299,7 +299,7 @@ def _run_adhoc(**overrides):
         run_dir_prefix="adhoc",
     )
     args.update(overrides)
-    return _run_verification_impl(**args)
+    return run_verification_impl(**args)
 
 
 def test_run_verification_impl_success(tmp_path):
@@ -566,7 +566,7 @@ def test_run_verification_impl_explicit_output_dir_not_overridden():
 
 
 # ---------------------------------------------------------------------------
-# _run_verification_impl (preview mode, run_dir_prefix="preview")
+# run_verification_impl (preview mode, run_dir_prefix="preview")
 # ---------------------------------------------------------------------------
 
 

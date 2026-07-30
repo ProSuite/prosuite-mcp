@@ -270,7 +270,7 @@ def run_verification(
     breakdown. Check 'status': 'error' for connection or parameter
     failures.
     """
-    return verification._run_verification_impl(
+    return verification.run_verification_impl(
         model_catalog_path,
         model_name,
         datasets,
@@ -313,7 +313,7 @@ def preview_condition_run(
             PROSUITE_HOST is local, since the service resolves the path.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
     """
-    return verification._run_verification_impl(
+    return verification.run_verification_impl(
         model_catalog_path,
         workspace_id,
         datasets,

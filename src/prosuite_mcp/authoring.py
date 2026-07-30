@@ -73,11 +73,7 @@ def _build_condition_element(
     allow_errors: bool = False,
     description: str = "",
 ) -> ET.Element:
-    """Build a <QualityCondition> element from an already-built condition object.
-
-    Shared by build_condition_xml and add_condition so the latter only calls
-    _build_condition once per invocation.
-    """
+    """Build a <QualityCondition> element from an already-built condition object."""
     ns = _NS["qa"]
 
     def q(tag: str) -> str:
@@ -116,31 +112,6 @@ def _build_condition_element(
             )
 
     return cond_el
-
-
-def build_condition_xml(
-    name: str,
-    condition_request: ConditionRequest,
-    datasets: list[DatasetRef],
-    workspace_id: str,
-    test_descriptor: str,
-    allow_errors: bool = False,
-    description: str = "",
-) -> str:
-    """Build a single <QualityCondition> XML fragment, without touching a spec."""
-    dataset_map = {
-        ds.name: Dataset(
-            ds.name, Model(workspace_id, workspace_id), ds.filter_expression
-        )
-        for ds in datasets
-    }
-    condition = _build_condition(condition_request, dataset_map)
-    cond_el = _build_condition_element(
-        name, condition, workspace_id, test_descriptor, allow_errors, description
-    )
-
-    ET.register_namespace("", _NS["qa"])
-    return ET.tostring(cond_el, encoding="unicode")
 
 
 def _find_descriptor_alias(root: ET.Element, test_descriptor: str) -> str | None:

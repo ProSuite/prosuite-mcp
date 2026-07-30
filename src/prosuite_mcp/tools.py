@@ -162,47 +162,6 @@ def load_spec(path: str) -> dict:
 
 
 @mcp.tool()
-def condition_to_xml(
-    name: str,
-    condition_request: ConditionRequest,
-    datasets: list[DatasetRef],
-    workspace_id: str,
-    test_descriptor: str,
-    allow_errors: bool = False,
-    description: str = "",
-) -> str:
-    """Preview a single ProSuite <QualityCondition> XML element, without touching a spec.
-
-    Builds the condition through the same prosuite factory as run_verification,
-    so parameter names and value formatting are engine-derived, not guessed.
-    Returns a string; never writes anywhere. test_descriptor must already
-    exist in the target spec (e.g. "MinLength(1)"); use add_condition_to_spec
-    if you want it resolved automatically and wired into a real specification.
-
-    Args:
-        name: Human-readable condition name.
-        condition_request: {condition: method name from list_conditions, params: dict}.
-        datasets: Feature classes/tables used by condition_request, each with
-            'name' and an optional 'filter_expression'.
-        workspace_id: Logical workspace id to bind datasets to (e.g. "DATA_OSM").
-        test_descriptor: Existing <TestDescriptor> name to reference.
-        allow_errors: Whether issues from this condition are tolerated.
-        description: Optional description element.
-
-    Returns the <QualityCondition> XML fragment.
-    """
-    return authoring.build_condition_xml(
-        name,
-        condition_request,
-        datasets,
-        workspace_id,
-        test_descriptor,
-        allow_errors,
-        description,
-    )
-
-
-@mcp.tool()
 def add_condition_to_spec(
     target_specification_name: str,
     name: str,

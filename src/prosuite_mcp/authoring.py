@@ -53,7 +53,9 @@ def _build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
     kwargs: dict[str, Any] = {}
     for p in info.params:
         if p.name not in req.params:
-            required = [pp.name for pp in info.params]
+            if p.has_default:
+                continue  # let the factory supply its own default
+            required = [pp.name for pp in info.params if not pp.has_default]
             raise ValueError(
                 f"Missing parameter {p.name!r} for condition {req.condition!r}. "
                 f"Required: {required}"

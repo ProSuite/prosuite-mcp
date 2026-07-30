@@ -47,6 +47,13 @@ def test_list_dataset_param_classified():
     assert list_param.is_dataset_list is True
 
 
+def test_param_default_recorded():
+    curve = CATALOG["qa_curve_0"]
+    by_name = {p.name: p for p in curve.params}
+    assert by_name["feature_class"].has_default is False
+    assert by_name["allowed_non_linear_segment_types"].has_default is True
+
+
 def test_all_catalog_entries_have_method_name():
     for name, info in CATALOG.items():
         assert info.method_name == name

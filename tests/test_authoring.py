@@ -93,6 +93,35 @@ def test_build_condition_missing_param():
         )
 
 
+def test_build_condition_omits_defaulted_params():
+    """qa_curve_0 defaults allowed_non_linear_segment_types and
+    group_issues_by_segment_type, so a spec that omits them still builds."""
+    condition = _build_condition(
+        ConditionRequest(condition="qa_curve_0", params={"feature_class": "Roads"}),
+        _make_dataset_map(),
+    )
+    assert condition.test_descriptor.startswith("QaCurve")
+
+
+def test_build_condition_still_requires_params_without_defaults():
+    """Only the factory's own defaults are filled in; nothing is invented."""
+    with pytest.raises(ValueError, match="Missing parameter 'limit'"):
+        _build_condition(
+            ConditionRequest(
+                condition="qa_min_length_1", params={"feature_class": "Roads"}
+            ),
+            _make_dataset_map(),
+        )
+
+
+def test_missing_param_error_lists_only_required_params():
+    with pytest.raises(ValueError, match=r"Required: \['feature_class', 'limit'\]"):
+        _build_condition(
+            ConditionRequest(condition="qa_min_length_1", params={}),
+            _make_dataset_map(),
+        )
+
+
 def test_build_condition_success():
     dm = _make_dataset_map()
 

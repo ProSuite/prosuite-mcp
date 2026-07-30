@@ -35,8 +35,8 @@ pytestmark = pytest.mark.skipif(
     reason="set PROSUITE_SPEC_CORPUS to a directory of real .qa.xml files",
 )
 
-# A floor to raise as the handoff bugs get fixed, not a target. Now 0.88.
-MIN_CLEAN_HANDOFF_RATE = 0.85
+# A floor to raise as the handoff bugs get fixed, not a target. Now 0.94.
+MIN_CLEAN_HANDOFF_RATE = 0.90
 
 # Never resolves (RFC 2606). Nothing connects, but localhost would be a real
 # ProSuite server on Windows.

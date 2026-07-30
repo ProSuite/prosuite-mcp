@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Element order is fixed by the ProSuite XSD: QualitySpecifications,
+     QualityConditions, Categories, TestDescriptors, Workspaces. The server
+     rejects the file outright if they appear in any other order. -->
+<DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+  <QualitySpecifications>
+    <QualitySpecification name="gdb1 smoke test">
+      <Elements>
+        <Element qualityCondition="lines: implausible minimum length" />
+      </Elements>
+    </QualitySpecification>
+  </QualitySpecifications>
+  <Categories>
+    <Category name="Smoke">
+      <QualityConditions>
+        <QualityCondition name="lines: implausible minimum length" testDescriptor="MinLength(1)" allowErrors="False">
+          <Description>Limit is absurdly high so every line is flagged and the run always yields issues.</Description>
+          <Parameters>
+            <Dataset parameter="featureClass" value="lines" workspace="GDB1" />
+            <Scalar parameter="limit" value="1000000" />
+          </Parameters>
+        </QualityCondition>
+      </QualityConditions>
+    </Category>
+  </Categories>
+  <TestDescriptors>
+    <TestDescriptor name="MinLength(1)">
+      <TestClass type="EsriDE.ProSuite.QA.Tests.QaMinLength" assembly="EsriDE.ProSuite.QA.Tests" constructorIndex="1" />
+    </TestDescriptor>
+  </TestDescriptors>
+  <Workspaces>
+    <Workspace id="GDB1" modelName="gdb1" />
+  </Workspaces>
+</DataQuality>

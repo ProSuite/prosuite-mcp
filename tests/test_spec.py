@@ -10,6 +10,7 @@ import pytest
 from prosuite_mcp.spec import (
     SpecCondition,
     _descriptor_to_method,
+    _resolve_param_name,
     _to_snake,
     get_spec_metadata,
     load_spec,
@@ -142,6 +143,52 @@ def test_descriptor_none_when_factory_has_no_such_test():
 
 def test_descriptor_none_on_garbage():
     assert _descriptor_to_method("") is None
+
+
+# ---------------------------------------------------------------------------
+# _resolve_param_name
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_param_name_uses_factory_signature():
+    """_to_snake alone yields minimum_zvalue, which the factory does not have."""
+    assert (
+        _resolve_param_name("qa_within_z_range_0", "minimumZValue") == "minimum_z_value"
+    )
+
+
+def test_resolve_param_name_falls_back_without_method():
+    assert _resolve_param_name(None, "featureClass") == "feature_class"
+
+
+def test_resolve_param_name_falls_back_for_unknown_param():
+    assert (
+        _resolve_param_name("qa_min_length_0", "someOtherParam") == "some_other_param"
+    )
+
+
+def test_load_spec_resolves_param_names_against_the_factory(tmp_path):
+    """161 conditions in the real corpus hit exactly this: the spec supplies
+    minimumZValue, _to_snake makes minimum_zvalue, the factory wants
+    minimum_z_value, and run_verification rejects it as a missing parameter."""
+    xml = textwrap.dedent("""\
+        <?xml version="1.0" encoding="utf-8"?>
+        <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+          <QualityConditions>
+            <QualityCondition name="Heights" testDescriptor="WithinZRange(0)">
+              <Parameters>
+                <Scalar parameter="minimumZValue" value="100" />
+              </Parameters>
+            </QualityCondition>
+          </QualityConditions>
+        </DataQuality>
+    """)
+    p = tmp_path / "z.qa.xml"
+    p.write_text(xml, encoding="utf-8")
+
+    condition = load_spec(str(p))[0]
+
+    assert condition.scalar_params[0].py_name == "minimum_z_value"
 
 
 # ---------------------------------------------------------------------------

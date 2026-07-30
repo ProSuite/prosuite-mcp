@@ -62,6 +62,24 @@ def _descriptor_to_method(descriptor: str) -> str | None:
     return _CATALOG_BY_NORMALIZED.get(stem.lower() + (version or ""))
 
 
+# Same problem one level down: minimumZValue snake-cases to minimum_zvalue but
+# the factory calls it minimum_z_value, so resolve against the signature too.
+_PARAMS_BY_NORMALIZED = {
+    method: {p.name.replace("_", ""): p.name for p in info.params}
+    for method, info in CATALOG.items()
+}
+
+
+def _resolve_param_name(method: str | None, xml_name: str) -> str:
+    """Factory parameter name for an XML parameter, snake_case if unresolvable."""
+    names = _PARAMS_BY_NORMALIZED.get(method or "")
+    if names:
+        resolved = names.get(xml_name.lower())
+        if resolved:
+            return resolved
+    return _to_snake(xml_name)
+
+
 def _is_list_dataset_param(method: str, py_name: str) -> bool:
     """Whether py_name is a List[BaseDataset] parameter of method, per CATALOG.
 
@@ -112,7 +130,7 @@ def _parse_condition(
         for p in params_el:
             tag = p.tag.split("}")[-1]
             xml_pname = p.get("parameter", "")
-            py_pname = _to_snake(xml_pname)
+            py_pname = _resolve_param_name(method, xml_pname)
 
             if tag == "Dataset":
                 if p.get("transformerName"):

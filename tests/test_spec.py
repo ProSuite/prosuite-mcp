@@ -50,10 +50,15 @@ _XML = textwrap.dedent("""\
         </Category>
         <Category name="Buildings">
           <QualityConditions>
-            <QualityCondition name="Buildings: attribute check" testDescriptor="ObjectAttributeConstraint" allowErrors="False">
+            <QualityCondition name="Buildings: attribute check" testDescriptor="Constraint(0)" allowErrors="False">
               <Parameters>
                 <Dataset parameter="table" value="MY_BUILDINGS" workspace="mydb" />
                 <Scalar parameter="constraint" value="HEIGHT > 0" />
+              </Parameters>
+            </QualityCondition>
+            <QualityCondition name="Buildings: no such test" testDescriptor="ObjectAttributeConstraint" allowErrors="False">
+              <Parameters>
+                <Dataset parameter="table" value="MY_BUILDINGS" workspace="mydb" />
               </Parameters>
             </QualityCondition>
           </QualityConditions>
@@ -114,10 +119,25 @@ def test_descriptor_no_version():
 
 
 def test_descriptor_no_version_multi_word():
+    assert _descriptor_to_method("GdbConstraintFactory") == "qa_gdb_constraint_factory"
+
+
+def test_descriptor_already_qa_prefixed():
     assert (
-        _descriptor_to_method("ObjectAttributeConstraint")
-        == "qa_object_attribute_constraint"
+        _descriptor_to_method("QaGdbConstraintFactory") == "qa_gdb_constraint_factory"
     )
+
+
+def test_descriptor_consecutive_capitals():
+    assert _descriptor_to_method("WithinZRange(0)") == "qa_within_z_range_0"
+
+
+def test_descriptor_digit_in_stem():
+    assert _descriptor_to_method("Qa3dConstantZ(0)") == "qa3d_constant_z_0"
+
+
+def test_descriptor_none_when_factory_has_no_such_test():
+    assert _descriptor_to_method("ObjectAttributeConstraint") is None
 
 
 def test_descriptor_none_on_garbage():
@@ -130,18 +150,25 @@ def test_descriptor_none_on_garbage():
 
 
 def test_load_spec_total(conditions):
-    assert len(conditions) == 4
+    assert len(conditions) == 5
 
 
 def test_load_spec_supported_count(conditions):
     supported = [c for c in conditions if not c.unsupported]
-    assert len(supported) == 3  # transformer one is unsupported
+    assert len(supported) == 3  # transformer and no-such-test ones are unsupported
 
 
 def test_load_spec_transformer_unsupported(conditions):
     transformer_cond = next(c for c in conditions if "transformer" in c.name)
     assert transformer_cond.unsupported is True
     assert "transformer" in transformer_cond.unsupported_reason
+
+
+def test_load_spec_absent_factory_method_unsupported(conditions):
+    """search_spec must not offer a condition whose method does not exist."""
+    cond = next(c for c in conditions if "no such test" in c.name)
+    assert cond.unsupported is True
+    assert "ObjectAttributeConstraint" in cond.unsupported_reason
 
 
 # ---------------------------------------------------------------------------

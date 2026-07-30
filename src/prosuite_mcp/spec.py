@@ -45,13 +45,21 @@ def _to_snake(name: str) -> str:
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower()
 
 
+# prosuite's method names follow no rule a descriptor can be rewritten into
+# (QaGdbConstraintFactory -> qa_gdb_constraint_factory, Qa3dConstantZ(0) ->
+# qa3d_constant_z_0), so match against the factory itself, ignoring underscores.
+_CATALOG_BY_NORMALIZED = {name.replace("_", ""): name for name in CATALOG}
+
+
 def _descriptor_to_method(descriptor: str) -> str | None:
+    """Factory method for a testDescriptor, or None if prosuite has no such test."""
     m = re.match(r"^(\w+?)(?:\((\d+)\))?$", descriptor)
     if not m:
         return None
-    class_name, version = m.group(1), m.group(2)
-    snake = _to_snake(class_name)
-    return f"qa_{snake}_{version}" if version is not None else f"qa_{snake}"
+    stem, version = m.group(1), m.group(2)
+    if not stem.lower().startswith("qa"):
+        stem = "qa" + stem
+    return _CATALOG_BY_NORMALIZED.get(stem.lower() + (version or ""))
 
 
 def _is_list_dataset_param(method: str, py_name: str) -> bool:
@@ -140,7 +148,9 @@ def _parse_condition(
         unsupported_reason = "uses transformer preprocessing"
     elif method is None:
         unsupported = True
-        unsupported_reason = f"unrecognised testDescriptor: {descriptor!r}"
+        unsupported_reason = (
+            f"no prosuite factory method for testDescriptor {descriptor!r}"
+        )
 
     return SpecCondition(
         name=name,

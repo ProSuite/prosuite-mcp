@@ -96,6 +96,7 @@ def test_qa_min_length_flags_real_feature_against_live_service(monkeypatch):
     assert result["status"] == "success", result
     assert result["engine_confirmed"] is True
     assert result["total_errors"] >= 1
+    assert result["sample_features"], "expected at least one real flagged feature"
 
 
 def test_xml_specification_runs_against_live_service(monkeypatch, restore_active_spec):

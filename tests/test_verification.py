@@ -3,7 +3,11 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from prosuite.verification import VerifiedCondition, VerifiedSpecification
+from prosuite.verification import (
+    ServiceStatus,
+    VerifiedCondition,
+    VerifiedSpecification,
+)
 
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.verification import (
@@ -54,9 +58,13 @@ def _fake_issue(code: str, table: str, allowable: bool, condition_id: int = 0):
     )
 
 
-def _fake_response(issues, verified_specification=None, status="Running", message=""):
+def _fake_response(
+    issues, verified_specification=None, status=ServiceStatus.status_1, message=""
+):
     """Mirrors prosuite's VerificationResponse, which always carries a status
-    and a message alongside the issues."""
+    and a message alongside the issues. Statuses come from ServiceStatus so
+    these exercise the same comparison _run_verify makes: status_1 is Running,
+    status_3 Finished, status_4 Failed."""
     return SimpleNamespace(
         issues=issues,
         verified_specification=verified_specification,
@@ -76,7 +84,7 @@ def test_run_verify_aggregates_stream_without_retaining_all_issues():
         _fake_response(
             [_fake_issue("B", "points", allowable=True, condition_id=2)],
             verified_specification="SPEC",
-            status="Finished",
+            status=ServiceStatus.status_3,
         ),
     ]
     service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
@@ -103,7 +111,7 @@ def test_run_verify_keeps_the_message_from_a_failed_response():
     responses = [
         _fake_response(
             [],
-            status="Failed",
+            status=ServiceStatus.status_4,
             message="Server error: Error deserializing file: invalid child element",
         )
     ]
@@ -118,7 +126,9 @@ def test_run_verify_keeps_the_message_from_a_failed_response():
 
 
 def test_run_verify_ignores_messages_on_non_failed_responses():
-    responses = [_fake_response([], status="Running", message="progress noise")]
+    responses = [
+        _fake_response([], status=ServiceStatus.status_1, message="progress noise")
+    ]
     service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
 
     outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)

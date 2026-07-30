@@ -10,6 +10,7 @@ import pytest
 from prosuite_mcp.spec import (
     SpecCondition,
     _descriptor_to_method,
+    _resolve_param_name,
     _to_snake,
     get_spec_metadata,
     load_spec,
@@ -142,6 +143,46 @@ def test_descriptor_none_when_factory_has_no_such_test():
 
 def test_descriptor_none_on_garbage():
     assert _descriptor_to_method("") is None
+
+
+# ---------------------------------------------------------------------------
+# _resolve_param_name
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_param_name_uses_factory_signature():
+    assert _resolve_param_name("qa_vertex_coincidence_0", "zTolerance") == "z_tolerance"
+
+
+def test_resolve_param_name_falls_back_without_method():
+    assert _resolve_param_name(None, "featureClass") == "feature_class"
+
+
+def test_resolve_param_name_falls_back_for_unknown_param():
+    assert (
+        _resolve_param_name("qa_min_length_0", "someOtherParam") == "some_other_param"
+    )
+
+
+def test_load_spec_resolves_param_names_against_the_factory(tmp_path):
+    xml = textwrap.dedent("""\
+        <?xml version="1.0" encoding="utf-8"?>
+        <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+          <QualityConditions>
+            <QualityCondition name="Vertices" testDescriptor="VertexCoincidence(0)">
+              <Parameters>
+                <Scalar parameter="zTolerance" value="0.01" />
+              </Parameters>
+            </QualityCondition>
+          </QualityConditions>
+        </DataQuality>
+    """)
+    p = tmp_path / "z.qa.xml"
+    p.write_text(xml, encoding="utf-8")
+
+    condition = load_spec(str(p))[0]
+
+    assert condition.scalar_params[0].py_name == "z_tolerance"
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@
   ],
   "enabledManagers": ["pep621", "github-actions"],
   "lockFileMaintenance": { "enabled": true, "automerge": true },
+  "rangeStrategy": "update-lockfile",
   "packageRules": [
     {
       "matchUpdateTypes": ["patch", "minor"],

@@ -96,6 +96,19 @@ def test_describe_condition_known():
     assert "dataset name" in result  # feature_class is a dataset param
 
 
+def test_describe_condition_marks_optional_params():
+    """qa_curve_0 defaults everything but feature_class, and without this the
+    caller has to invent values for parameters ProSuite would fill in."""
+    result = describe_condition("qa_curve_0")
+
+    lines = {
+        line.split()[0]: line for line in result.splitlines() if line.startswith("  ")
+    }
+    assert lines["feature_class"].endswith("required")
+    assert lines["allowed_non_linear_segment_types"].endswith("optional")
+    assert lines["group_issues_by_segment_type"].endswith("optional")
+
+
 def test_describe_condition_unknown():
     result = describe_condition("no_such_condition_xyz")
     assert "Unknown condition" in result

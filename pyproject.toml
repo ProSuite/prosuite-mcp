@@ -52,6 +52,9 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/prosuite_mcp"]
 
+# Only Python sources belong in the wheel.
+exclude = ["**/.claude", "**/__pycache__"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "strict"

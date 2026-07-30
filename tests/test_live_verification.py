@@ -20,11 +20,17 @@ from __future__ import annotations
 
 import os
 import socket
+from pathlib import Path
 
 import pytest
 
-from prosuite_mcp.schemas import ConditionRequest, DatasetRef
-from prosuite_mcp.tools import run_verification
+from prosuite_mcp.schemas import ConditionRequest, DatasetRef, WorkspaceReplacement
+from prosuite_mcp.tools import (
+    describe_spec,
+    load_spec,
+    run_verification,
+    run_xml_verification,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("PROSUITE_LIVE_TESTS") != "1",
@@ -39,6 +45,20 @@ _PORT = (
 )
 
 _GDB1_PATH = "C:/ProSuite/TestData/gdb1.gdb"
+
+# Committed alongside the tests: ours, tiny, and no customer data. Its one
+# condition is nested under <Categories>, the shape describe_spec used to miss.
+_SPEC_PATH = Path(__file__).parent / "data" / "gdb1.qa.xml"
+_SPEC_NAME = "gdb1 smoke test"
+
+
+@pytest.fixture()
+def restore_active_spec():
+    import prosuite_mcp.spec as spec_module
+
+    saved = (spec_module._active_spec_path, spec_module._loaded_conditions)
+    yield
+    spec_module._active_spec_path, spec_module._loaded_conditions = saved
 
 
 def _server_reachable() -> bool:
@@ -70,6 +90,42 @@ def test_qa_min_length_flags_real_feature_against_live_service(monkeypatch):
         ],
         # output_dir is a server-side write path; "" (not None) skips the
         # default local runs/ dir, which the remote VM can't write to.
+        output_dir="",
+    )
+
+    assert result["status"] == "success", result
+    assert result["engine_confirmed"] is True
+    assert result["total_errors"] >= 1
+    assert result["sample_features"], "expected at least one real flagged feature"
+
+
+def test_xml_specification_runs_against_live_service(monkeypatch, restore_active_spec):
+    """The documented XML workflow end to end: load a spec, ask it which
+    workspaces to replace, run it. Everything the mocked suite covers stops at
+    a serialized request; only this proves ProSuite accepts what we send."""
+    if not _server_reachable():
+        pytest.skip(f"ProSuite service not reachable at {_HOST}:{_PORT}")
+
+    monkeypatch.setenv("PROSUITE_HOST", _HOST)
+    monkeypatch.setenv("PROSUITE_PORT", str(_PORT))
+
+    assert load_spec(str(_SPEC_PATH))["status"] == "ok"
+
+    spec = next(
+        s
+        for s in describe_spec()["specifications"]
+        if s["specification_name"] == _SPEC_NAME
+    )
+    assert spec["workspace_ids"] == ["GDB1"]
+
+    result = run_xml_verification(
+        specification_name=_SPEC_NAME,
+        # Fed straight from describe_spec, which is how the docs tell an agent
+        # to build this and what silently returned nothing before.
+        data_source_replacements=[
+            WorkspaceReplacement(workspace_id=w, workspace_path=_GDB1_PATH)
+            for w in spec["workspace_ids"]
+        ],
         output_dir="",
     )
 

@@ -3,7 +3,11 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from prosuite.verification import VerifiedCondition, VerifiedSpecification
+from prosuite.verification import (
+    ServiceStatus,
+    VerifiedCondition,
+    VerifiedSpecification,
+)
 
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.verification import (
@@ -54,18 +58,33 @@ def _fake_issue(code: str, table: str, allowable: bool, condition_id: int = 0):
     )
 
 
+def _fake_response(
+    issues, verified_specification=None, status=ServiceStatus.status_1, message=""
+):
+    """Mirrors prosuite's VerificationResponse, which always carries a status
+    and a message alongside the issues. Statuses come from ServiceStatus so
+    these exercise the same comparison _run_verify makes: status_1 is Running,
+    status_3 Finished, status_4 Failed."""
+    return SimpleNamespace(
+        issues=issues,
+        verified_specification=verified_specification,
+        service_call_status=status,
+        message=message,
+    )
+
+
 def test_run_verify_aggregates_stream_without_retaining_all_issues():
     responses = [
-        SimpleNamespace(
-            issues=[
+        _fake_response(
+            [
                 _fake_issue("A", "lines", allowable=False, condition_id=1),
                 _fake_issue("A", "lines", allowable=False, condition_id=1),
-            ],
-            verified_specification=None,
+            ]
         ),
-        SimpleNamespace(
-            issues=[_fake_issue("B", "points", allowable=True, condition_id=2)],
+        _fake_response(
+            [_fake_issue("B", "points", allowable=True, condition_id=2)],
             verified_specification="SPEC",
+            status=ServiceStatus.status_3,
         ),
     ]
     service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
@@ -83,6 +102,38 @@ def test_run_verify_aggregates_stream_without_retaining_all_issues():
     assert outcome.counts_by_condition == {1: 2}
     assert len(outcome.sample) == 3
     assert outcome.sample[0]["issue_code"] == "A"
+    assert outcome.failure_messages == []
+
+
+def test_run_verify_keeps_the_message_from_a_failed_response():
+    """The service explains a rejection here and nowhere else; dropping it
+    leaves the caller with no way to tell a bad spec from a bad path."""
+    responses = [
+        _fake_response(
+            [],
+            status=ServiceStatus.status_4,
+            message="Server error: Error deserializing file: invalid child element",
+        )
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, verified = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert verified is None
+    assert outcome.failure_messages == [
+        "Server error: Error deserializing file: invalid child element"
+    ]
+
+
+def test_run_verify_ignores_messages_on_non_failed_responses():
+    responses = [
+        _fake_response([], status=ServiceStatus.status_1, message="progress noise")
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert outcome.failure_messages == []
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +366,23 @@ def test_run_verification_impl_engine_confirmed_false_without_final_summary(tmp_
 
     assert result["status"] == "error"
     assert result["engine_confirmed"] is False
+    assert result["error"] == "Verification stream ended without a final summary."
+
+
+def test_run_verification_impl_surfaces_the_service_failure_message(tmp_path):
+    outcome = StreamOutcome(
+        failure_messages=["Server error: dataset 'lines' not found"]
+    )
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch("prosuite_mcp.verification._run_verify", return_value=(outcome, None)),
+        patch("prosuite_mcp.verification.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = _run_adhoc()
+
+    assert result["status"] == "error"
+    assert result["error"] == "Server error: dataset 'lines' not found"
 
 
 def test_run_verification_impl_grpc_error(tmp_path):
@@ -542,6 +610,34 @@ def test_run_xml_verification_impl_no_final_summary(tmp_path):
 
     assert result["status"] == "error"
     assert result["issues_seen_in_stream"] == 3
+
+
+def test_run_xml_verification_impl_surfaces_the_service_failure_message(tmp_path):
+    """A rejected spec is the common failure here, and only the service knows
+    why. This is the exact message the live XML test provoked."""
+    outcome = StreamOutcome(
+        failure_messages=[
+            "Server error: Error deserializing file: The element 'DataQuality' "
+            "has invalid child element 'TestDescriptors'"
+        ]
+    )
+    with (
+        patch("prosuite_mcp.verification.XmlSpecification"),
+        patch("prosuite_mcp.verification._make_service"),
+        patch("prosuite_mcp.verification._run_verify", return_value=(outcome, None)),
+        patch("prosuite_mcp.verification.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = run_xml_verification_impl(
+            spec_path="/tmp/x.qa.xml",
+            specification_name="Spec_A",
+            replacements=[],
+            output_dir=None,
+            envelope=None,
+        )
+
+    assert result["status"] == "error"
+    assert "invalid child element" in result["error"]
 
 
 def test_run_xml_verification_impl_output_dir_in_result():

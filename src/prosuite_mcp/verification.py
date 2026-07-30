@@ -16,7 +16,7 @@ import grpc
 from prosuite import EnvelopePerimeter, Service
 from prosuite.data_model import Dataset, Model
 from prosuite.quality import Specification, XmlSpecification
-from prosuite.verification import VerifiedSpecification
+from prosuite.verification import ServiceStatus, VerifiedSpecification
 
 from .authoring import _build_condition
 from .config import load_config
@@ -72,6 +72,8 @@ class StreamOutcome:
     counts_by_table: dict[str, int] = field(default_factory=dict)
     counts_by_condition: dict[int | None, int] = field(default_factory=dict)
     sample: list[dict[str, Any]] = field(default_factory=list)
+    # What the service said when it gave up, e.g. why it rejected a spec.
+    failure_messages: list[str] = field(default_factory=list)
 
 
 def _run_verify(
@@ -88,6 +90,8 @@ def _run_verify(
     outcome = StreamOutcome()
     verified_spec = None
     for response in service.verify(spec, perimeter=perimeter, output_dir=output_dir):
+        if response.service_call_status == ServiceStatus.status_4 and response.message:
+            outcome.failure_messages.append(response.message)
         for issue in response.issues:
             outcome.total += 1
             if issue.allowable:
@@ -109,6 +113,13 @@ def _run_verify(
         if response.verified_specification is not None:
             verified_spec = response.verified_specification
     return outcome, verified_spec
+
+
+def _failure_reason(outcome: StreamOutcome) -> str:
+    """Why the run produced no summary, in the service's own words if it said."""
+    if outcome.failure_messages:
+        return " ".join(outcome.failure_messages)
+    return "Verification stream ended without a final summary."
 
 
 def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str, Any]:
@@ -199,7 +210,7 @@ def _run_verification_impl(
         return {
             "status": "error",
             "engine_confirmed": False,
-            "error": "Verification stream ended without a final summary.",
+            "error": _failure_reason(outcome),
             "issues_seen_in_stream": outcome.total,
         }
 
@@ -252,7 +263,7 @@ def run_xml_verification_impl(
         return {
             "status": "error",
             "engine_confirmed": False,
-            "error": "Verification stream ended without a final summary.",
+            "error": _failure_reason(outcome),
             "issues_seen_in_stream": outcome.total,
         }
 

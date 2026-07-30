@@ -16,7 +16,7 @@ jobs:
           working-directory: "."
 
       - name: Install dev dependencies
-        run: uv sync --only-group dev --no-install-project
+        run: uv sync --only-group dev --no-install-project --locked
 
       - name: ruff check
         run: .venv/bin/ruff check . # invoke directly; `uv run` would sync all project deps first
@@ -39,7 +39,7 @@ jobs:
           working-directory: "."
 
       - name: Install all dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --locked
 
       - name: pyright
         run: .venv/bin/pyright

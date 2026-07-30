@@ -42,10 +42,21 @@ _MINIMAL_XML = textwrap.dedent("""\
 """)
 
 
-def _cfg(spec_path: str | None = None):
-    from prosuite_mcp.config import Config
+@pytest.fixture(autouse=True)
+def _isolate_spec_state(monkeypatch):
+    """Start every test with no spec loaded and none configured.
 
-    return Config(host="localhost", port=5151, ssl_cert_path=None, spec_path=spec_path)
+    The active spec is module-level state in spec.py, so without this a
+    load_spec call in one test would leak into the next.
+    """
+    import prosuite_mcp.spec as spec_module
+
+    saved = (spec_module._active_spec_path, spec_module._loaded_conditions)
+    spec_module._active_spec_path = None
+    spec_module._loaded_conditions = None
+    monkeypatch.delenv("PROSUITE_SPEC_PATH", raising=False)
+    yield
+    spec_module._active_spec_path, spec_module._loaded_conditions = saved
 
 
 # ---------------------------------------------------------------------------
@@ -113,31 +124,58 @@ def test_load_spec_success(tmp_path):
     spec_file = tmp_path / "test.qa.xml"
     spec_file.write_text(_MINIMAL_XML, encoding="utf-8")
 
-    original = spec_module._loaded_conditions
-    try:
-        result = load_spec(str(spec_file))
-        assert result["status"] == "ok"
-        assert result["conditions_loaded"] == 1
-        assert spec_module._loaded_conditions is not None
-        assert len(spec_module._loaded_conditions) == 1
-    finally:
-        spec_module._loaded_conditions = original
+    result = load_spec(str(spec_file))
+
+    assert result["status"] == "ok"
+    assert result["conditions_loaded"] == 1
+    assert spec_module._loaded_conditions is not None
+    assert len(spec_module._loaded_conditions) == 1
 
 
 def test_load_spec_makes_search_work(tmp_path):
-    import prosuite_mcp.spec as spec_module
     from prosuite_mcp.tools import search_spec as tool_search_spec
 
     spec_file = tmp_path / "test.qa.xml"
     spec_file.write_text(_MINIMAL_XML, encoding="utf-8")
 
-    original = spec_module._loaded_conditions
-    try:
-        load_spec(str(spec_file))
-        result = tool_search_spec("minimum length")
-        assert result["total_matches"] == 1
-    finally:
-        spec_module._loaded_conditions = original
+    load_spec(str(spec_file))
+
+    assert tool_search_spec("minimum length")["total_matches"] == 1
+
+
+def test_load_spec_is_seen_by_every_spec_tool(tmp_path):
+    """load_spec must switch the spec for all spec tools, not just search_spec."""
+    spec_file = tmp_path / "runtime.qa.xml"
+    spec_file.write_text(_MINIMAL_XML, encoding="utf-8")
+
+    load_spec(str(spec_file))
+
+    assert "error" not in describe_spec()
+
+    with patch(
+        "prosuite_mcp.verification.run_xml_verification_impl",
+        return_value={"status": "success"},
+    ) as mock_impl:
+        run_xml_verification(specification_name="Spec_A", data_source_replacements=[])
+    assert mock_impl.call_args[0][0] == str(spec_file)
+
+
+def test_load_spec_takes_precedence_over_configured_spec_path(tmp_path, monkeypatch):
+    """A runtime load_spec must win over PROSUITE_SPEC_PATH, not be ignored by it."""
+    env_spec = tmp_path / "env.qa.xml"
+    env_spec.write_text(_MINIMAL_XML, encoding="utf-8")
+    runtime_spec = tmp_path / "runtime.qa.xml"
+    runtime_spec.write_text(_MINIMAL_XML, encoding="utf-8")
+    monkeypatch.setenv("PROSUITE_SPEC_PATH", str(env_spec))
+
+    load_spec(str(runtime_spec))
+
+    with patch(
+        "prosuite_mcp.verification.run_xml_verification_impl",
+        return_value={"status": "success"},
+    ) as mock_impl:
+        run_xml_verification(specification_name="Spec_A", data_source_replacements=[])
+    assert mock_impl.call_args[0][0] == str(runtime_spec)
 
 
 # ---------------------------------------------------------------------------
@@ -146,21 +184,15 @@ def test_load_spec_makes_search_work(tmp_path):
 
 
 def test_describe_spec_no_spec_configured():
-    with patch("prosuite_mcp.tools.load_config", return_value=_cfg(spec_path=None)):
-        result = describe_spec()
+    result = describe_spec()
     assert "error" in result
     assert "PROSUITE_SPEC_PATH" in result["error"]
 
 
-def test_describe_spec_returns_metadata():
+def test_describe_spec_returns_metadata(monkeypatch):
     fake_meta = {"specifications": [], "workspaces": []}
-    with (
-        patch(
-            "prosuite_mcp.tools.load_config",
-            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
-        ),
-        patch("prosuite_mcp.tools.get_spec_metadata", return_value=fake_meta),
-    ):
+    monkeypatch.setenv("PROSUITE_SPEC_PATH", "/tmp/x.qa.xml")
+    with patch("prosuite_mcp.tools.get_spec_metadata", return_value=fake_meta):
         result = describe_spec()
     assert result == fake_meta
 
@@ -228,19 +260,16 @@ def test_add_condition_to_spec_delegates_to_authoring_when_spec_xml_given():
     assert result == "<xml/>"
 
 
-def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(tmp_path):
+def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(
+    tmp_path, monkeypatch
+):
     spec_file = tmp_path / "test.qa.xml"
     spec_file.write_text("<spec/>", encoding="utf-8")
+    monkeypatch.setenv("PROSUITE_SPEC_PATH", str(spec_file))
 
-    with (
-        patch(
-            "prosuite_mcp.tools.load_config",
-            return_value=_cfg(spec_path=str(spec_file)),
-        ),
-        patch(
-            "prosuite_mcp.authoring.add_condition", return_value="<updated/>"
-        ) as mock_add,
-    ):
+    with patch(
+        "prosuite_mcp.authoring.add_condition", return_value="<updated/>"
+    ) as mock_add:
         result = add_condition_to_spec(
             target_specification_name="MySpec",
             name="lines minlen",
@@ -257,36 +286,34 @@ def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(tmp_path)
 
 
 def test_add_condition_to_spec_raises_without_spec_xml_or_configured_path():
-    with patch("prosuite_mcp.tools.load_config", return_value=_cfg(spec_path=None)):
-        with pytest.raises(ValueError, match="No spec loaded"):
-            add_condition_to_spec(
-                target_specification_name="MySpec",
-                name="lines minlen",
-                condition_request=ConditionRequest(
-                    condition="qa_min_length_1",
-                    params={"feature_class": "lines", "limit": 2.0},
-                ),
-                datasets=[DatasetRef(name="lines")],
-                workspace_id="DATA_OSM",
-            )
+    with pytest.raises(ValueError, match="No spec loaded"):
+        add_condition_to_spec(
+            target_specification_name="MySpec",
+            name="lines minlen",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )
 
 
-def test_add_condition_to_spec_raises_value_error_when_configured_path_missing():
-    with patch(
-        "prosuite_mcp.tools.load_config",
-        return_value=_cfg(spec_path="/does/not/exist.qa.xml"),
-    ):
-        with pytest.raises(ValueError, match="Could not read spec file"):
-            add_condition_to_spec(
-                target_specification_name="MySpec",
-                name="lines minlen",
-                condition_request=ConditionRequest(
-                    condition="qa_min_length_1",
-                    params={"feature_class": "lines", "limit": 2.0},
-                ),
-                datasets=[DatasetRef(name="lines")],
-                workspace_id="DATA_OSM",
-            )
+def test_add_condition_to_spec_raises_value_error_when_configured_path_missing(
+    monkeypatch,
+):
+    monkeypatch.setenv("PROSUITE_SPEC_PATH", "/does/not/exist.qa.xml")
+    with pytest.raises(ValueError, match="Could not read spec file"):
+        add_condition_to_spec(
+            target_specification_name="MySpec",
+            name="lines minlen",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -364,29 +391,23 @@ def test_preview_condition_run_forwards_params_to_shared_impl():
 
 
 def test_run_xml_verification_no_spec_configured():
-    with patch("prosuite_mcp.tools.load_config", return_value=_cfg(spec_path=None)):
-        result = run_xml_verification(
-            specification_name="Spec_A",
-            data_source_replacements=[],
-        )
+    result = run_xml_verification(
+        specification_name="Spec_A",
+        data_source_replacements=[],
+    )
     assert result["status"] == "error"
     assert "PROSUITE_SPEC_PATH" in result["error"]
     assert result["engine_confirmed"] is False
 
 
-def test_run_xml_verification_delegates_to_verification_impl():
+def test_run_xml_verification_delegates_to_verification_impl(monkeypatch):
     from prosuite_mcp.schemas import WorkspaceReplacement
 
-    with (
-        patch(
-            "prosuite_mcp.tools.load_config",
-            return_value=_cfg(spec_path="/tmp/x.qa.xml"),
-        ),
-        patch(
-            "prosuite_mcp.verification.run_xml_verification_impl",
-            return_value={"status": "success"},
-        ) as mock_impl,
-    ):
+    monkeypatch.setenv("PROSUITE_SPEC_PATH", "/tmp/x.qa.xml")
+    with patch(
+        "prosuite_mcp.verification.run_xml_verification_impl",
+        return_value={"status": "success"},
+    ) as mock_impl:
         result = run_xml_verification(
             specification_name="Spec_A",
             data_source_replacements=[

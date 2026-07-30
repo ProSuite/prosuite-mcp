@@ -50,6 +50,9 @@ def describe_condition(name: str) -> str:
     parameters expect a dataset name string (must match a name in the
     datasets list you will pass to run_verification). Primitive parameters
     take their direct value (number, bool, string).
+
+    Parameters marked optional may be left out of run_verification's params:
+    ProSuite applies its own default. Everything else must be supplied.
     """
     info = CATALOG.get(name)
     if info is None:
@@ -69,7 +72,8 @@ def describe_condition(name: str) -> str:
             kind = "dataset name"
         else:
             kind = "value"
-        lines.append(f"  {p.name} ({p.type_hint}) — {kind}")
+        required = "optional" if p.has_default else "required"
+        lines.append(f"  {p.name} ({p.type_hint}) - {kind}, {required}")
 
     return "\n".join(lines)
 

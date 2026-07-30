@@ -22,10 +22,10 @@ To make it run by default on your own machine without changing the shared defaul
 
 ### Spec corpus harness
 
-`tests/test_spec_corpus.py` runs a directory of real `.qa.xml` files through `load_spec`, `get_spec_metadata` and the `search_spec` to `run_verification` handoff. No server needed. The other test modules only prove the code does what we assumed, because we wrote every fixture in them; this one measures what real spec files actually contain. Skipped by default, and the files are not committed since they belong to customers and projects. Opt in:
+`tests/test_spec_corpus.py` runs real `.qa.xml` files through `load_spec`, `get_spec_metadata`, and the `search_spec` to `run_verification` handoff, up to the serialized gRPC request. No server needed. Skipped by default; the spec files aren't committed since they belong to customers. Opt in:
 
 ```bash
 PROSUITE_SPEC_CORPUS=<dir of .qa.xml files> uv run pytest tests/test_spec_corpus.py -v -s
 ```
 
-`-s` shows the summary: how many conditions `search_spec` offers and how many of them `run_verification` would actually accept, broken down by failure reason. `MIN_CLEAN_HANDOFF_RATE` in the module is a floor to raise as those failures get fixed, not a target to lower.
+`-s` shows how many conditions `search_spec` offers and how many `run_verification` would accept, by failure reason. `MIN_CLEAN_HANDOFF_RATE` is a floor to raise, not a target to lower.

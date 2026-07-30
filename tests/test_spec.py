@@ -315,6 +315,51 @@ def test_search_no_match(conditions):
     assert result["results"] == []
 
 
+def _single_condition_spec(tmp_path, descriptor, params_xml):
+    xml = textwrap.dedent(f"""\
+        <?xml version="1.0" encoding="utf-8"?>
+        <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+          <QualityConditions>
+            <QualityCondition name="Only" testDescriptor="{descriptor}">
+              <Parameters>{params_xml}</Parameters>
+            </QualityCondition>
+          </QualityConditions>
+        </DataQuality>
+    """)
+    p = tmp_path / "one.qa.xml"
+    p.write_text(xml, encoding="utf-8")
+    return load_spec(str(p))
+
+
+def test_search_fills_omitted_scalar_list_with_empty_list(tmp_path):
+    """A spec drops the element entirely when the list is empty, so without
+    this run_verification rejects the condition as missing field_names."""
+    conditions = _single_condition_spec(
+        tmp_path,
+        "RegularExpression(5)",
+        '<Dataset parameter="table" value="T" workspace="w" />'
+        '<Scalar parameter="pattern" value="^x$" />'
+        '<Scalar parameter="matchIsError" value="True" />'
+        '<Scalar parameter="patternDescription" value="" />',
+    )
+
+    params = search_spec(conditions, "")["results"][0]["condition_request"]["params"]
+
+    assert params["field_names"] == []
+
+
+def test_search_leaves_omitted_dataset_list_absent(tmp_path):
+    """An empty dataset list makes the condition vacuous, so it must fail
+    rather than quietly run against nothing."""
+    conditions = _single_condition_spec(
+        tmp_path, "BorderSense(1)", '<Scalar parameter="clockwise" value="True" />'
+    )
+
+    params = search_spec(conditions, "")["results"][0]["condition_request"]["params"]
+
+    assert "polyline_classes" not in params
+
+
 def test_search_by_category(conditions):
     result = search_spec(conditions, "buildings")
     assert result["total_matches"] == 1

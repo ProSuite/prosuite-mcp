@@ -294,6 +294,16 @@ def search_spec(
         for sp in c.scalar_params:
             params[sp.py_name] = sp.value
 
+        # A spec omits a list element entirely when the list is empty, e.g.
+        # RegularExpression with fieldListType=IgnoredFields and no fieldNames
+        # means "ignore none". Dataset lists are left out: empty there makes the
+        # condition vacuous rather than valid, so it should fail loudly.
+        info = CATALOG.get(c.method)
+        if info is not None:
+            for p in info.params:
+                if p.is_list and not p.is_dataset and not p.has_default:
+                    params.setdefault(p.name, [])
+
         results.append(
             {
                 "name": c.name,

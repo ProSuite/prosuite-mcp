@@ -47,6 +47,19 @@ def test_list_dataset_param_classified():
     assert list_param.is_dataset_list is True
 
 
+def test_scalar_list_param_classified():
+    by_name = {p.name: p for p in CATALOG["qa_regular_expression_5"].params}
+    field_names = by_name["field_names"]
+    assert field_names.is_list is True
+    assert field_names.is_dataset is False
+
+
+def test_dataset_list_param_is_also_a_list():
+    by_name = {p.name: p for p in CATALOG["qa_border_sense_1"].params}
+    assert by_name["polyline_classes"].is_list is True
+    assert by_name["polyline_classes"].is_dataset is True
+
+
 def test_param_default_recorded():
     curve = CATALOG["qa_curve_0"]
     by_name = {p.name: p for p in curve.params}

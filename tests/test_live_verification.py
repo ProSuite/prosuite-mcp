@@ -88,9 +88,6 @@ def test_qa_min_length_flags_real_feature_against_live_service(monkeypatch):
                 params={"feature_class": "lines", "limit": 1_000_000},
             )
         ],
-        # output_dir is a server-side write path; "" (not None) skips the
-        # default local runs/ dir, which the remote VM can't write to.
-        output_dir="",
     )
 
     assert result["status"] == "success", result
@@ -126,7 +123,6 @@ def test_xml_specification_runs_against_live_service(monkeypatch, restore_active
             WorkspaceReplacement(workspace_id=w, workspace_path=_GDB1_PATH)
             for w in spec["workspace_ids"]
         ],
-        output_dir="",
     )
 
     assert result["status"] == "success", result

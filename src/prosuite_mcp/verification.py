@@ -6,6 +6,7 @@ concerns, so this is testable with a fake Service.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -29,6 +30,22 @@ def _make_run_dir(name: str, base: Path) -> Path:
     path = base / f"{ts}_{safe}"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _service_is_local() -> bool:
+    """Whether the service shares our filesystem, so a path we invent means
+    something to it. Loopback in any spelling: all of 127.0.0.0/8, ::1 with or
+    without gRPC's brackets, or a localhost name (RFC 6761). A hostname we
+    cannot classify counts as remote rather than resolving it, since a DNS
+    lookup here can hang and need not match how gRPC resolves the same name.
+    """
+    host = load_config().host.strip().lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
 
 
 def _make_service() -> Service:
@@ -183,7 +200,14 @@ def _verify_and_summarize(
         )
 
     if output_dir is None:
-        output_dir = str(_make_run_dir(run_name, Path.cwd() / "runs"))
+        # ProSuite resolves this path on its own machine, so a local runs/ dir
+        # is only useful when that machine is this one. Empty means the service
+        # writes no Issues.gdb or report.
+        output_dir = (
+            str(_make_run_dir(run_name, Path.cwd() / "runs"))
+            if _service_is_local()
+            else ""
+        )
 
     service = _make_service()
 

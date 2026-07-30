@@ -260,7 +260,9 @@ def run_verification(
               parameters take a string matching a name in 'datasets';
               primitive parameters take their direct value.
         output_dir: Optional server-side directory for Issues.gdb and
-            HTML report. The service process must have write access.
+            HTML report; the service process must have write access. Omitted,
+            a local runs/ directory is used only when PROSUITE_HOST is local,
+            since the path is resolved on the service's machine.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
             Omit for full-extent verification.
 
@@ -306,7 +308,9 @@ def preview_condition_run(
             'name' and an optional 'filter_expression'.
         workspace_id: Logical name for the data model (arbitrary, used in
             generated condition names).
-        output_dir: Optional server-side directory for Issues.gdb and HTML report.
+        output_dir: Optional server-side directory for Issues.gdb and HTML
+            report. Omitted, a local runs/ directory is used only when
+            PROSUITE_HOST is local, since the service resolves the path.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
     """
     return verification._run_verification_impl(
@@ -344,7 +348,9 @@ def run_xml_verification(
         data_source_replacements: Maps each workspace_id in the XML to the actual
             workspace path on the ProSuite server. Example:
             [{"workspace_id": "DATA_OSM", "workspace_path": "C:/data/osm.sde"}]
-        output_dir: Optional server-side directory for Issues.gdb and HTML report.
+        output_dir: Optional server-side directory for Issues.gdb and HTML
+            report. Omitted, a local runs/ directory is used only when
+            PROSUITE_HOST is local, since the service resolves the path.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
 
     Returns a summary with status, total_errors, and per-condition breakdown.

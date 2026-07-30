@@ -19,3 +19,13 @@ PROSUITE_LIVE_TESTS=1 PROSUITE_HOST=<host> PROSUITE_PORT=<port> uv run pytest te
 Expects a file geodatabase named `gdb1.gdb` (feature classes `lines`/`points`/`polygons`); adjust `_GDB1_PATH` in the test if yours differs.
 
 To make it run by default on your own machine without changing the shared default, export the three variables above in your shell profile or a local `.env` instead.
+
+### Spec corpus harness
+
+`tests/test_spec_corpus.py` runs real `.qa.xml` files through `load_spec`, `get_spec_metadata`, and the `search_spec` to `run_verification` handoff, up to the serialized gRPC request. No server needed. Skipped by default; the spec files aren't committed since they belong to customers. Opt in:
+
+```bash
+PROSUITE_SPEC_CORPUS=<dir of .qa.xml files> uv run pytest tests/test_spec_corpus.py -v -s
+```
+
+`-s` shows how many conditions `search_spec` offers and how many `run_verification` would accept, by failure reason. `MIN_CLEAN_HANDOFF_RATE` is a floor to raise, not a target to lower.

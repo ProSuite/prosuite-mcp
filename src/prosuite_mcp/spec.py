@@ -111,13 +111,20 @@ def _walk_conditions(
 def _parse_condition(
     cond_el: ET.Element,
     category: str,
+    descriptor_allow_errors: dict[str, bool] | None = None,
 ) -> SpecCondition:
     name = cond_el.get("name", "")
     descriptor = cond_el.get("testDescriptor", "")
-    # Absent means False in ProSuite: a violation is a hard error unless the
-    # spec says otherwise. Defaulting to True reported 42% of real conditions
-    # as tolerated when they are not.
-    allow_errors = cond_el.get("allowErrors", "False").lower() == "true"
+
+    # allowErrors on a condition is an Override, not a bool: absent means "do
+    # not override", so the value falls back to the testDescriptor's own
+    # allowErrors, and only then to False. See QualityCondition.AllowErrors in
+    # ProSuite.DomainModel.Core.
+    raw_allow_errors = cond_el.get("allowErrors")
+    if raw_allow_errors is not None:
+        allow_errors = raw_allow_errors.lower() == "true"
+    else:
+        allow_errors = (descriptor_allow_errors or {}).get(descriptor, False)
 
     desc_el = cond_el.find("qa:Description", _NS)
     description = (desc_el.text or "").strip() if desc_el is not None else ""
@@ -186,12 +193,25 @@ def _parse_condition(
     )
 
 
+def _descriptor_allow_errors(root: ET.Element) -> dict[str, bool]:
+    """testDescriptor name to its allowErrors, which conditions inherit.
+
+    Plain xs:boolean here, unlike the Override on a condition, so absent is
+    False.
+    """
+    return {
+        td.get("name", ""): td.get("allowErrors", "false").lower() == "true"
+        for td in root.iter(f"{{{_NS['qa']}}}TestDescriptor")
+    }
+
+
 def load_spec(path: str) -> list[SpecCondition]:
     tree = ET.parse(path)
     root = tree.getroot()
+    descriptor_allow_errors = _descriptor_allow_errors(root)
     pairs: list[tuple[ET.Element, str]] = []
     _walk_conditions(root, [], pairs)
-    return [_parse_condition(el, cat) for el, cat in pairs]
+    return [_parse_condition(el, cat, descriptor_allow_errors) for el, cat in pairs]
 
 
 def get_spec_metadata(path: str) -> dict:

@@ -220,7 +220,9 @@ def add_condition_to_spec(
             allow_errors,
             description,
         )
-    except ValueError as exc:
+    except Exception as exc:
+        # Not just ValueError: malformed spec_xml surfaces as ET.ParseError,
+        # which subclasses SyntaxError and would escape the documented contract.
         return _error(str(exc))
 
     return {"status": "ok", "spec_xml": updated}

@@ -325,6 +325,25 @@ def test_add_condition_to_spec_errors_instead_of_raising_from_authoring():
     assert "already has a QualityCondition" in result["error"]
 
 
+def test_add_condition_to_spec_errors_on_malformed_spec_xml():
+    """ET.ParseError subclasses SyntaxError, so catching ValueError alone let
+    malformed XML escape the documented error shape."""
+    result = add_condition_to_spec(
+        target_specification_name="MySpec",
+        name="x",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+        spec_xml="<not xml",
+    )
+
+    assert result["status"] == "error"
+    assert "unclosed token" in result["error"]
+
+
 def test_every_dict_tool_reports_failure_the_same_way():
     """A caller should check status, not remember which tool it called."""
     from prosuite_mcp.tools import search_spec

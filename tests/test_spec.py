@@ -399,6 +399,19 @@ def test_allow_errors_inherited_from_descriptor(tmp_path):
     assert condition.allow_errors is True
 
 
+@pytest.mark.parametrize(
+    ("descriptor_value", "inherited"),
+    [("true", True), ("1", True), ("false", False), ("0", False)],
+)
+def test_descriptor_allow_errors_accepts_xs_boolean(
+    tmp_path, descriptor_value, inherited
+):
+    """The descriptor attribute is xs:boolean, whose lexical space is
+    true/false/1/0, not just the words."""
+    condition = _spec_with_descriptor(tmp_path, "", f'allowErrors="{descriptor_value}"')
+    assert condition.allow_errors is inherited
+
+
 def test_allow_errors_false_when_neither_sets_it(tmp_path):
     condition = _spec_with_descriptor(tmp_path, "", "")
     assert condition.allow_errors is False

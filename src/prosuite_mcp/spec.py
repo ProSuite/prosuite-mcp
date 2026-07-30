@@ -196,11 +196,13 @@ def _parse_condition(
 def _descriptor_allow_errors(root: ET.Element) -> dict[str, bool]:
     """testDescriptor name to its allowErrors, which conditions inherit.
 
-    Plain xs:boolean here, unlike the Override on a condition, so absent is
-    False.
+    xs:boolean here, so "1" is as valid as "true" and absent is False. The
+    condition's own attribute is the Override enum instead (Null/True/False),
+    which is why the two are not parsed the same way.
     """
     return {
-        td.get("name", ""): td.get("allowErrors", "false").lower() == "true"
+        td.get("name", ""): td.get("allowErrors", "false").strip().lower()
+        in {"true", "1"}
         for td in root.iter(f"{{{_NS['qa']}}}TestDescriptor")
     }
 

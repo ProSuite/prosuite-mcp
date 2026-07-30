@@ -151,7 +151,10 @@ def test_descriptor_none_on_garbage():
 
 
 def test_resolve_param_name_uses_factory_signature():
-    assert _resolve_param_name("qa_vertex_coincidence_0", "zTolerance") == "z_tolerance"
+    """_to_snake alone yields minimum_zvalue, which the factory does not have."""
+    assert (
+        _resolve_param_name("qa_within_z_range_0", "minimumZValue") == "minimum_z_value"
+    )
 
 
 def test_resolve_param_name_falls_back_without_method():
@@ -165,13 +168,16 @@ def test_resolve_param_name_falls_back_for_unknown_param():
 
 
 def test_load_spec_resolves_param_names_against_the_factory(tmp_path):
+    """161 conditions in the real corpus hit exactly this: the spec supplies
+    minimumZValue, _to_snake makes minimum_zvalue, the factory wants
+    minimum_z_value, and run_verification rejects it as a missing parameter."""
     xml = textwrap.dedent("""\
         <?xml version="1.0" encoding="utf-8"?>
         <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
           <QualityConditions>
-            <QualityCondition name="Vertices" testDescriptor="VertexCoincidence(0)">
+            <QualityCondition name="Heights" testDescriptor="WithinZRange(0)">
               <Parameters>
-                <Scalar parameter="zTolerance" value="0.01" />
+                <Scalar parameter="minimumZValue" value="100" />
               </Parameters>
             </QualityCondition>
           </QualityConditions>
@@ -182,7 +188,7 @@ def test_load_spec_resolves_param_names_against_the_factory(tmp_path):
 
     condition = load_spec(str(p))[0]
 
-    assert condition.scalar_params[0].py_name == "z_tolerance"
+    assert condition.scalar_params[0].py_name == "minimum_z_value"
 
 
 # ---------------------------------------------------------------------------

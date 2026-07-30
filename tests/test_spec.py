@@ -360,6 +360,17 @@ def test_search_leaves_omitted_dataset_list_absent(tmp_path):
     assert "polyline_classes" not in params
 
 
+def test_absent_allow_errors_means_hard_error(tmp_path):
+    """ProSuite treats a missing allowErrors as False. Defaulting it to True
+    reported 42% of real conditions as tolerated when they are not, and
+    disagreed with the value authoring.py writes for the same absence."""
+    conditions = _single_condition_spec(
+        tmp_path, "MinLength(1)", '<Scalar parameter="limit" value="1.5" />'
+    )
+
+    assert conditions[0].allow_errors is False
+
+
 def test_search_by_category(conditions):
     result = search_spec(conditions, "buildings")
     assert result["total_matches"] == 1

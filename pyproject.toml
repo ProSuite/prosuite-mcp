@@ -19,9 +19,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "prosuite>=1.7.0.0",
-    "mcp[cli]==2.0.0",
-    "pydantic==2.13.4",
+    "prosuite>=1.7.0.0,<2",
+    "mcp[cli]>=2.0,<3",
+    "pydantic>=2.13,<3",
 ]
 
 [project.scripts]

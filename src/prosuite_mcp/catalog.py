@@ -13,6 +13,7 @@ class ParamInfo:
     type_hint: str
     is_dataset: bool
     is_dataset_list: bool
+    has_default: bool = False
 
 
 @dataclass
@@ -62,6 +63,7 @@ def _build_catalog() -> dict[str, ConditionInfo]:
                     type_hint=type_hint,
                     is_dataset=is_ds,
                     is_dataset_list=is_ds_list,
+                    has_default=p.default is not inspect.Parameter.empty,
                 )
             )
         catalog[name] = ConditionInfo(

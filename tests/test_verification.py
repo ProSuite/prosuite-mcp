@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from prosuite.verification import (
     ServiceStatus,
     VerifiedCondition,
@@ -16,9 +17,51 @@ from prosuite_mcp.verification import (
     _make_run_dir,
     _run_verification_impl,
     _run_verify,
+    _service_is_local,
     _summarize,
     run_xml_verification_impl,
 )
+
+
+@pytest.fixture(autouse=True)
+def _local_service(monkeypatch):
+    """Pin the host: whether output_dir defaults to a local runs/ dir depends on
+    it, and a developer shell may export a remote PROSUITE_HOST."""
+    monkeypatch.setenv("PROSUITE_HOST", "localhost")
+
+
+# ---------------------------------------------------------------------------
+# _service_is_local
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("host", "is_local"),
+    [
+        ("localhost", True),
+        ("LOCALHOST", True),
+        ("db.localhost", True),
+        ("127.0.0.1", True),
+        # The whole 127.0.0.0/8 block is loopback, not just .0.1
+        ("127.0.0.2", True),
+        ("127.255.255.254", True),
+        ("::1", True),
+        # gRPC targets bracket IPv6 literals
+        ("[::1]", True),
+        ("0:0:0:0:0:0:0:1", True),
+        ("203.0.113.10", False),
+        ("192.168.1.10", False),
+        ("example.com", False),
+        ("0.0.0.0", False),
+        ("", False),
+    ],
+)
+def test_service_is_local_classifies_host(monkeypatch, host, is_local):
+    """Getting this wrong either invents a path a remote server cannot use or
+    suppresses the local Issues.gdb a local one would have written."""
+    monkeypatch.setenv("PROSUITE_HOST", host)
+    assert _service_is_local() is is_local
+
 
 # ---------------------------------------------------------------------------
 # _decode_issue
@@ -463,6 +506,48 @@ def test_run_verification_impl_auto_creates_output_dir(tmp_path):
 
     assert "output_dir" in result
     assert result["status"] == "success"
+
+
+def test_run_verification_impl_creates_no_local_dir_for_a_remote_service(
+    tmp_path, monkeypatch
+):
+    """The service resolves output_dir on its own machine, so inventing a local
+    path for a remote host produced an empty dir here and a bad path there."""
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
+    final_spec = _mock_verified_spec()
+
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch(
+            "prosuite_mcp.verification._run_verify",
+            return_value=(StreamOutcome(total=2, errors=2), final_spec),
+        ),
+        patch("prosuite_mcp.verification.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = _run_adhoc()
+
+    assert result["status"] == "success"
+    assert result["output_dir"] == ""
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_run_verification_impl_creates_a_local_dir_for_a_local_service(tmp_path):
+    final_spec = _mock_verified_spec()
+
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch(
+            "prosuite_mcp.verification._run_verify",
+            return_value=(StreamOutcome(total=2, errors=2), final_spec),
+        ),
+        patch("prosuite_mcp.verification.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = _run_adhoc()
+
+    assert result["output_dir"].startswith(str(tmp_path))
+    assert len(list((tmp_path / "runs").iterdir())) == 1
 
 
 def test_run_verification_impl_explicit_output_dir_not_overridden():

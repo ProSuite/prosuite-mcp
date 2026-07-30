@@ -176,7 +176,7 @@ def condition_to_xml(
     Builds the condition through the same prosuite factory as run_verification,
     so parameter names and value formatting are engine-derived, not guessed.
     Returns a string; never writes anywhere. test_descriptor must already
-    exist in the target spec (e.g. "MinLength(1)") — use add_condition_to_spec
+    exist in the target spec (e.g. "MinLength(1)"); use add_condition_to_spec
     if you want it resolved automatically and wired into a real specification.
 
     Args:
@@ -218,7 +218,7 @@ def add_condition_to_spec(
     Builds the condition through the same prosuite factory as run_verification,
     resolves a matching <TestDescriptor> (never synthesizes one), and returns
     the full updated spec XML with the condition appended and wired into
-    target_specification_name. Preview only — never writes to a file. Call
+    target_specification_name. Preview only: never writes to a file. Call
     describe_spec first for valid specification/workspace/dataset names.
 
     Args:

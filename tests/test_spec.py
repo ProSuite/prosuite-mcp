@@ -1,4 +1,4 @@
-"""Unit tests for spec.py — XML parsing, condition extraction, and search."""
+"""Unit tests for spec.py: XML parsing, condition extraction, and search."""
 
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ def test_load_spec_resolves_param_names_against_the_factory(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# load_spec — counts
+# load_spec: counts
 # ---------------------------------------------------------------------------
 
 
@@ -219,7 +219,7 @@ def test_load_spec_absent_factory_method_unsupported(conditions):
 
 
 # ---------------------------------------------------------------------------
-# load_spec — single-dataset condition (MinLength)
+# load_spec: single-dataset condition (MinLength)
 # ---------------------------------------------------------------------------
 
 
@@ -260,7 +260,7 @@ def test_min_length_scalar_param(min_length):
 
 
 # ---------------------------------------------------------------------------
-# load_spec — list-dataset condition (MustIntersectOther(1))
+# load_spec: list-dataset condition (MustIntersectOther(1))
 # ---------------------------------------------------------------------------
 
 
@@ -405,7 +405,7 @@ def test_search_result_description_surfaced(conditions):
 
 
 # ---------------------------------------------------------------------------
-# search_spec MCP tool — no spec loaded
+# search_spec MCP tool: no spec loaded
 # ---------------------------------------------------------------------------
 
 

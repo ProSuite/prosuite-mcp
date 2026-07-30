@@ -12,7 +12,7 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 | ------------------------ | ----------- | ------------------------------- |
 | `PROSUITE_HOST`          | `localhost` | ProSuite service host           |
 | `PROSUITE_PORT`          | `5151`      | ProSuite service port           |
-| `PROSUITE_SSL_CERT_PATH` | —           | Path to PEM certificate for TLS |
+| `PROSUITE_SSL_CERT_PATH` | (none)      | Path to PEM certificate for TLS |
 
 ## Usage
 
@@ -38,7 +38,3 @@ Without a spec, Claude uses `list_conditions` and `describe_condition` to find a
 ## Development
 
 See [docs/development.md](docs/development.md).
-
-## License
-
-MIT — see [LICENSE](LICENSE).

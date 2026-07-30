@@ -27,13 +27,13 @@ Every tool is defined in [`src/prosuite_mcp/tools.py`](src/prosuite_mcp/tools.py
 
 ### Example
 
-Once connected, you talk to Claude in plain language:
+Once connected, you talk to the assistant in plain language:
 
 > Check road connectivity in `C:/data/tlm.sde`.
 
-With a spec loaded, Claude calls `search_spec` to find the relevant pre-configured conditions from the `.qa.xml` file, then calls `run_verification` with the pre-filled parameters and returns a summary of errors per condition.
+With a spec loaded, the assistant calls `describe_spec` to see which specifications and workspaces it defines, then `run_xml_verification` to run one against your data, and returns a summary of errors per condition. The spec goes to the ProSuite service as-is, so per-condition filters and defaults are applied exactly as your domain experts configured them. `search_spec` browses the conditions in a spec by keyword.
 
-Without a spec, Claude uses `list_conditions` and `describe_condition` to find and configure conditions from scratch.
+Without a spec, the assistant uses `list_conditions` and `describe_condition` to find and configure conditions from scratch, then `run_verification` to run them ad-hoc. Datasets take a `filter_expression` here too, but only one per dataset per run, so a spec that filters the same feature class differently in two conditions cannot be reproduced this way.
 
 ## Development
 

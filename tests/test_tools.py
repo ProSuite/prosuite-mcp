@@ -13,7 +13,6 @@ from prosuite_mcp.catalog import CATALOG
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.tools import (
     add_condition_to_spec,
-    condition_to_xml,
     describe_condition,
     describe_spec,
     list_conditions,
@@ -211,37 +210,8 @@ def test_describe_spec_returns_metadata(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# condition_to_xml / add_condition_to_spec -- delegation to authoring.py
+# add_condition_to_spec -- delegation to authoring.py
 # ---------------------------------------------------------------------------
-
-
-def test_condition_to_xml_delegates_to_authoring():
-    cond_req = ConditionRequest(condition="qa_min_length_1", params={"limit": 1.5})
-    datasets = [DatasetRef(name="lines")]
-
-    with patch(
-        "prosuite_mcp.authoring.build_condition_xml", return_value="<xml/>"
-    ) as mock_build:
-        result = condition_to_xml(
-            name="lines: minimum length",
-            condition_request=cond_req,
-            datasets=datasets,
-            workspace_id="DATA_OSM",
-            test_descriptor="MinLength(1)",
-            allow_errors=True,
-            description="desc",
-        )
-
-    mock_build.assert_called_once_with(
-        "lines: minimum length",
-        cond_req,
-        datasets,
-        "DATA_OSM",
-        "MinLength(1)",
-        True,
-        "desc",
-    )
-    assert result == "<xml/>"
 
 
 def test_add_condition_to_spec_delegates_to_authoring_when_spec_xml_given():

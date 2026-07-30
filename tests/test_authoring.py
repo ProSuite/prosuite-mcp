@@ -9,7 +9,12 @@ from prosuite.data_model import Dataset, Model
 from prosuite.quality import Condition
 
 from prosuite_mcp import authoring
-from prosuite_mcp.authoring import _build_condition, _resolve_param, add_condition
+from prosuite_mcp.authoring import (
+    _build_condition,
+    _build_condition_element,
+    _resolve_param,
+    add_condition,
+)
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.spec import _NS, _parse_condition
 
@@ -137,24 +142,41 @@ def test_build_condition_success():
 
 
 # ---------------------------------------------------------------------------
-# build_condition_xml
+# _build_condition_element (the per-condition XML add_condition emits)
 # ---------------------------------------------------------------------------
 
 
-def test_build_condition_xml_round_trips_dataset_and_scalar_params():
-    xml = authoring.build_condition_xml(
+def _condition_element(
+    name,
+    condition_request,
+    datasets,
+    workspace_id="DATA_OSM",
+    test_descriptor="MinLength(1)",
+    allow_errors=False,
+):
+    model = Model(workspace_id, workspace_id)
+    dataset_map = {
+        ds.name: Dataset(ds.name, model, ds.filter_expression) for ds in datasets
+    }
+    return _build_condition_element(
+        name,
+        _build_condition(condition_request, dataset_map),
+        workspace_id,
+        test_descriptor,
+        allow_errors,
+    )
+
+
+def test_condition_element_round_trips_dataset_and_scalar_params():
+    el = _condition_element(
         name="lines: minimum length",
         condition_request=ConditionRequest(
             condition="qa_min_length_1",
             params={"feature_class": "lines", "limit": 1.5},
         ),
         datasets=[DatasetRef(name="lines")],
-        workspace_id="DATA_OSM",
-        test_descriptor="MinLength(1)",
-        allow_errors=False,
     )
 
-    el = ET.fromstring(xml)
     parsed = _parse_condition(el, "")
 
     assert parsed.name == "lines: minimum length"
@@ -168,35 +190,32 @@ def test_build_condition_xml_round_trips_dataset_and_scalar_params():
     assert ds_el is not None and ds_el.get("workspace") == "DATA_OSM"
 
 
-def test_build_condition_xml_round_trips_per_condition_where_filter():
-    xml = authoring.build_condition_xml(
+def test_condition_element_round_trips_per_condition_where_filter():
+    el = _condition_element(
         name="natur subtype 0: minimum length",
         condition_request=ConditionRequest(
             condition="qa_min_length_1",
             params={"feature_class": "Natur", "limit": 2.0},
         ),
         datasets=[DatasetRef(name="Natur", filter_expression="subtype=0")],
-        workspace_id="DATA_OSM",
-        test_descriptor="MinLength(1)",
     )
 
-    parsed = _parse_condition(ET.fromstring(xml), "")
+    parsed = _parse_condition(el, "")
     assert parsed.dataset_params[0].filter_expression == "subtype=0"
 
 
-def test_build_condition_xml_round_trips_list_dataset_params():
-    xml = authoring.build_condition_xml(
+def test_condition_element_round_trips_list_dataset_params():
+    el = _condition_element(
         name="border sense over two classes",
         condition_request=ConditionRequest(
             condition="qa_border_sense_1",
             params={"polyline_classes": ["Eisenbahn", "Strassen"], "clockwise": True},
         ),
         datasets=[DatasetRef(name="Eisenbahn"), DatasetRef(name="Strassen")],
-        workspace_id="DATA_OSM",
         test_descriptor="BorderSense(1)",
     )
 
-    parsed = _parse_condition(ET.fromstring(xml), "")
+    parsed = _parse_condition(el, "")
     list_params = [
         dp for dp in parsed.dataset_params if dp.py_name == "polyline_classes"
     ]
@@ -206,28 +225,20 @@ def test_build_condition_xml_round_trips_list_dataset_params():
     assert {s.py_name: s.value for s in parsed.scalar_params}["clockwise"] == "True"
 
 
-def test_build_condition_xml_emits_pascal_case_allow_errors():
-    xml_false = authoring.build_condition_xml(
-        name="lines: minimum length",
-        condition_request=ConditionRequest(
-            condition="qa_min_length_1",
-            params={"feature_class": "lines", "limit": 1.5},
-        ),
-        datasets=[DatasetRef(name="lines")],
-        workspace_id="DATA_OSM",
-        test_descriptor="MinLength(1)",
-        allow_errors=False,
+def test_condition_element_emits_pascal_case_allow_errors():
+    request = ConditionRequest(
+        condition="qa_min_length_1",
+        params={"feature_class": "lines", "limit": 1.5},
     )
-    xml_true = authoring.build_condition_xml(
-        name="lines: minimum length",
-        condition_request=ConditionRequest(
-            condition="qa_min_length_1",
-            params={"feature_class": "lines", "limit": 1.5},
-        ),
-        datasets=[DatasetRef(name="lines")],
-        workspace_id="DATA_OSM",
-        test_descriptor="MinLength(1)",
-        allow_errors=True,
+    datasets = [DatasetRef(name="lines")]
+
+    xml_false = ET.tostring(
+        _condition_element("c", request, datasets, allow_errors=False),
+        encoding="unicode",
+    )
+    xml_true = ET.tostring(
+        _condition_element("c", request, datasets, allow_errors=True),
+        encoding="unicode",
     )
 
     # allowErrors maps to ProSuite's Override enum (Null/True/False), not

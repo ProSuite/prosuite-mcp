@@ -34,12 +34,11 @@ Builds a `Specification` programmatically from individual `ConditionRequest` obj
 | `run_xml_verification`                  | Run a named QualitySpecification from the loaded spec, with workspace path substitutions                                       |
 | `list_conditions`, `describe_condition` | Explore the full condition catalog for ad-hoc use                                                                              |
 | `run_verification`                      | Ad-hoc verification without a spec                                                                                             |
-| `condition_to_xml`                      | Preview a single condition's XML in isolation; requires an already-known `test_descriptor` alias                               |
 | `add_condition_to_spec`                 | Preview adding a new QualityCondition to a spec, reusing an existing descriptor; returns updated spec XML, never writes a file |
 | `preview_condition_run`                 | Tier-2 authoring check: run a proposed condition ad-hoc and see what it actually flags, before merging it into a spec          |
 
 ## Spec Authoring
 
-`condition_to_xml` and `add_condition_to_spec` are preview-only: they build the condition through the same authoritative prosuite factory `run_verification` uses, so parameter names and value formatting are engine-derived, not guessed. Neither tool writes to disk: the caller (human or agent) reviews the returned XML and decides separately whether and how to persist it. `add_condition_to_spec` only reuses an existing `<TestDescriptor>`; it never synthesizes one, so a condition whose test type isn't already referenced somewhere in the target spec cannot currently be added this way.
+`add_condition_to_spec` is preview-only: it builds the condition through the same authoritative prosuite factory `run_verification` uses, so parameter names and value formatting are engine-derived, not guessed. It never writes to disk; the caller (human or agent) reviews the returned XML and decides separately whether and how to persist it. It only reuses an existing `<TestDescriptor>`, never synthesizing one, so a condition whose test type isn't already referenced somewhere in the target spec cannot currently be added this way.
 
 `preview_condition_run` closes the gap between Tier-1 (builds, references a valid descriptor) and Tier-2 (actually runs and flags real features): it's a thin wrapper around `run_verification` for a single condition, so the caller sees the same engine-confirmed summary, including actual flagged issues rather than just bind success, before deciding to merge a proposed condition into a spec.

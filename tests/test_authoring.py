@@ -247,6 +247,20 @@ def test_condition_element_emits_pascal_case_allow_errors():
     assert 'allowErrors="True"' in xml_true
 
 
+def test_allow_errors_round_trips_through_parse():
+    """What authoring writes for a condition must read back the same way; the
+    two sides used to disagree about what an absent attribute means."""
+    request = ConditionRequest(
+        condition="qa_min_length_1",
+        params={"feature_class": "lines", "limit": 1.5},
+    )
+    for allow_errors in (True, False):
+        element = _condition_element(
+            "c", request, [DatasetRef(name="lines")], allow_errors=allow_errors
+        )
+        assert _parse_condition(element, "").allow_errors is allow_errors
+
+
 # ---------------------------------------------------------------------------
 # add_condition
 # ---------------------------------------------------------------------------

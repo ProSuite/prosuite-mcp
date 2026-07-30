@@ -114,7 +114,10 @@ def _parse_condition(
 ) -> SpecCondition:
     name = cond_el.get("name", "")
     descriptor = cond_el.get("testDescriptor", "")
-    allow_errors = cond_el.get("allowErrors", "True").lower() == "true"
+    # Absent means False in ProSuite: a violation is a hard error unless the
+    # spec says otherwise. Defaulting to True reported 42% of real conditions
+    # as tolerated when they are not.
+    allow_errors = cond_el.get("allowErrors", "False").lower() == "true"
 
     desc_el = cond_el.find("qa:Description", _NS)
     description = (desc_el.text or "").strip() if desc_el is not None else ""

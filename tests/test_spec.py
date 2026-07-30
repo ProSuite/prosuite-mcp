@@ -371,6 +371,66 @@ def test_absent_allow_errors_means_hard_error(tmp_path):
     assert conditions[0].allow_errors is False
 
 
+def _spec_with_descriptor(tmp_path, condition_attrs, descriptor_attrs):
+    xml = textwrap.dedent(f"""\
+        <?xml version="1.0" encoding="utf-8"?>
+        <DataQuality xmlns="urn:ProSuite.QA.QualitySpecifications-3.0">
+          <QualityConditions>
+            <QualityCondition name="Only" testDescriptor="MinLength(1)" {condition_attrs}>
+              <Parameters><Scalar parameter="limit" value="1.5" /></Parameters>
+            </QualityCondition>
+          </QualityConditions>
+          <TestDescriptors>
+            <TestDescriptor name="MinLength(1)" {descriptor_attrs}>
+              <TestClass type="EsriDE.ProSuite.QA.Tests.QaMinLength" constructorIndex="1" />
+            </TestDescriptor>
+          </TestDescriptors>
+        </DataQuality>
+    """)
+    p = tmp_path / "descriptor.qa.xml"
+    p.write_text(xml, encoding="utf-8")
+    return load_spec(str(p))[0]
+
+
+def test_allow_errors_inherited_from_descriptor(tmp_path):
+    """allowErrors on a condition is an Override: absent falls back to the
+    descriptor. 554 real conditions rely on this."""
+    condition = _spec_with_descriptor(tmp_path, "", 'allowErrors="true"')
+    assert condition.allow_errors is True
+
+
+@pytest.mark.parametrize(
+    ("descriptor_value", "inherited"),
+    [("true", True), ("1", True), ("false", False), ("0", False)],
+)
+def test_descriptor_allow_errors_accepts_xs_boolean(
+    tmp_path, descriptor_value, inherited
+):
+    """The descriptor attribute is xs:boolean, whose lexical space is
+    true/false/1/0, not just the words."""
+    condition = _spec_with_descriptor(tmp_path, "", f'allowErrors="{descriptor_value}"')
+    assert condition.allow_errors is inherited
+
+
+def test_allow_errors_false_when_neither_sets_it(tmp_path):
+    condition = _spec_with_descriptor(tmp_path, "", "")
+    assert condition.allow_errors is False
+
+
+def test_allow_errors_on_condition_overrides_descriptor(tmp_path):
+    """The override exists to win; inheriting over an explicit False would
+    silently tolerate a condition the spec author marked as a hard error."""
+    condition = _spec_with_descriptor(
+        tmp_path, 'allowErrors="False"', 'allowErrors="true"'
+    )
+    assert condition.allow_errors is False
+
+
+def test_allow_errors_on_condition_used_without_a_descriptor_entry(tmp_path):
+    condition = _spec_with_descriptor(tmp_path, 'allowErrors="True"', "")
+    assert condition.allow_errors is True
+
+
 def test_search_by_category(conditions):
     result = search_spec(conditions, "buildings")
     assert result["total_matches"] == 1

@@ -14,6 +14,7 @@ class ParamInfo:
     is_dataset: bool
     is_dataset_list: bool
     has_default: bool = False
+    is_list: bool = False
 
 
 @dataclass
@@ -23,29 +24,30 @@ class ConditionInfo:
     params: list[ParamInfo] = field(default_factory=list)
 
 
-def _classify_param(annotation: object) -> tuple[str, bool, bool]:
-    """Return (type_hint_str, is_dataset, is_dataset_list)."""
+def _classify_param(annotation: object) -> tuple[str, bool, bool, bool]:
+    """Return (type_hint_str, is_dataset, is_dataset_list, is_list)."""
     if annotation is inspect.Parameter.empty:
-        return "any", False, False
+        return "any", False, False, False
 
     origin = getattr(annotation, "__origin__", None)
     args = getattr(annotation, "__args__", ()) or ()
+    is_list = origin is list or annotation is list
 
     if (
         origin is list
         and args
         and (issubclass(args[0], BaseDataset) if isinstance(args[0], type) else False)
     ):
-        return f"list[{args[0].__name__}]", True, True
+        return f"list[{args[0].__name__}]", True, True, True
 
     if isinstance(annotation, type) and issubclass(annotation, BaseDataset):
-        return annotation.__name__, True, False
+        return annotation.__name__, True, False, False
 
     name = getattr(annotation, "__name__", None)
     if name is not None:
-        return name, False, False
+        return name, False, False, is_list
 
-    return str(annotation), False, False
+    return str(annotation), False, False, is_list
 
 
 def _build_catalog() -> dict[str, ConditionInfo]:
@@ -56,7 +58,7 @@ def _build_catalog() -> dict[str, ConditionInfo]:
         sig = inspect.signature(method)
         params: list[ParamInfo] = []
         for pname, p in sig.parameters.items():
-            type_hint, is_ds, is_ds_list = _classify_param(p.annotation)
+            type_hint, is_ds, is_ds_list, is_list = _classify_param(p.annotation)
             params.append(
                 ParamInfo(
                     name=pname,
@@ -64,6 +66,7 @@ def _build_catalog() -> dict[str, ConditionInfo]:
                     is_dataset=is_ds,
                     is_dataset_list=is_ds_list,
                     has_default=p.default is not inspect.Parameter.empty,
+                    is_list=is_list,
                 )
             )
         catalog[name] = ConditionInfo(

@@ -206,7 +206,7 @@ def test_describe_spec_returns_metadata(monkeypatch):
     monkeypatch.setenv("PROSUITE_SPEC_PATH", "/tmp/x.qa.xml")
     with patch("prosuite_mcp.tools.get_spec_metadata", return_value=fake_meta):
         result = describe_spec()
-    assert result == fake_meta
+    assert result == {"status": "ok", **fake_meta}
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ def test_add_condition_to_spec_delegates_to_authoring_when_spec_xml_given():
         False,
         "",
     )
-    assert result == "<xml/>"
+    assert result == {"status": "ok", "spec_xml": "<xml/>"}
 
 
 def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(
@@ -264,39 +264,110 @@ def test_add_condition_to_spec_reads_configured_spec_path_when_omitted(
             workspace_id="DATA_OSM",
         )
 
-    assert result == "<updated/>"
+    assert result == {"status": "ok", "spec_xml": "<updated/>"}
     assert mock_add.call_args[0][5] == "<spec/>"
 
 
-def test_add_condition_to_spec_raises_without_spec_xml_or_configured_path():
-    with pytest.raises(ValueError, match="No spec loaded"):
-        add_condition_to_spec(
-            target_specification_name="MySpec",
-            name="lines minlen",
-            condition_request=ConditionRequest(
-                condition="qa_min_length_1",
-                params={"feature_class": "lines", "limit": 2.0},
-            ),
-            datasets=[DatasetRef(name="lines")],
-            workspace_id="DATA_OSM",
-        )
+def test_add_condition_to_spec_errors_without_spec_xml_or_configured_path():
+    result = add_condition_to_spec(
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+    )
+
+    assert result["status"] == "error"
+    assert "No spec loaded" in result["error"]
 
 
-def test_add_condition_to_spec_raises_value_error_when_configured_path_missing(
-    monkeypatch,
-):
+def test_add_condition_to_spec_errors_when_configured_path_missing(monkeypatch):
     monkeypatch.setenv("PROSUITE_SPEC_PATH", "/does/not/exist.qa.xml")
-    with pytest.raises(ValueError, match="Could not read spec file"):
-        add_condition_to_spec(
+
+    result = add_condition_to_spec(
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+    )
+
+    assert result["status"] == "error"
+    assert "Could not read spec file" in result["error"]
+
+
+def test_add_condition_to_spec_errors_instead_of_raising_from_authoring():
+    """authoring.add_condition raises for a duplicate name or a missing
+    descriptor; the tool must turn that into the same error shape."""
+    with patch(
+        "prosuite_mcp.authoring.add_condition",
+        side_effect=ValueError("Spec already has a QualityCondition named 'x'."),
+    ):
+        result = add_condition_to_spec(
             target_specification_name="MySpec",
-            name="lines minlen",
+            name="x",
             condition_request=ConditionRequest(
                 condition="qa_min_length_1",
                 params={"feature_class": "lines", "limit": 2.0},
             ),
             datasets=[DatasetRef(name="lines")],
             workspace_id="DATA_OSM",
+            spec_xml="<spec/>",
         )
+
+    assert result["status"] == "error"
+    assert "already has a QualityCondition" in result["error"]
+
+
+def test_add_condition_to_spec_errors_on_malformed_spec_xml():
+    """ET.ParseError subclasses SyntaxError, so catching ValueError alone let
+    malformed XML escape the documented error shape."""
+    result = add_condition_to_spec(
+        target_specification_name="MySpec",
+        name="x",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+        spec_xml="<not xml",
+    )
+
+    assert result["status"] == "error"
+    assert "unclosed token" in result["error"]
+
+
+def test_every_dict_tool_reports_failure_the_same_way():
+    """A caller should check status, not remember which tool it called."""
+    from prosuite_mcp.tools import search_spec
+
+    failures = [
+        describe_spec(),
+        search_spec("anything"),
+        load_spec("/does/not/exist.qa.xml"),
+        add_condition_to_spec(
+            target_specification_name="MySpec",
+            name="x",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        ),
+        run_xml_verification(specification_name="X", data_source_replacements=[]),
+    ]
+
+    for result in failures:
+        assert result["status"] == "error", result
+        assert result["error"], result
 
 
 # ---------------------------------------------------------------------------

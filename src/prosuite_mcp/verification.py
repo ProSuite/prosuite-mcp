@@ -162,27 +162,17 @@ def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str,
     }
 
 
-def _run_verification_impl(
-    model_catalog_path: str,
-    model_name: str,
-    datasets: list[DatasetRef],
-    conditions: list[ConditionRequest],
+def _verify_and_summarize(
+    spec: Specification | XmlSpecification,
+    run_name: str,
     output_dir: str | None,
     envelope: dict[str, float] | None,
-    run_dir_prefix: str,
 ) -> dict[str, Any]:
-    try:
-        model = Model(model_name, model_catalog_path)
-        dataset_map: dict[str, Dataset] = {
-            ds.name: Dataset(ds.name, model, ds.filter_expression) for ds in datasets
-        }
+    """Run a built specification and shape the result.
 
-        spec = Specification(name="prosuite-mcp verification")
-        for cond_req in conditions:
-            spec.add_condition(_build_condition(cond_req, dataset_map))
-    except ValueError as exc:
-        return {"status": "error", "engine_confirmed": False, "error": str(exc)}
-
+    Ad-hoc and XML verification differ only in how they build the spec object;
+    everything from here on is the same for both.
+    """
     perimeter = None
     if envelope:
         perimeter = EnvelopePerimeter(
@@ -193,7 +183,7 @@ def _run_verification_impl(
         )
 
     if output_dir is None:
-        output_dir = str(_make_run_dir(run_dir_prefix, Path.cwd() / "runs"))
+        output_dir = str(_make_run_dir(run_name, Path.cwd() / "runs"))
 
     service = _make_service()
 
@@ -220,6 +210,30 @@ def _run_verification_impl(
     return summary
 
 
+def _run_verification_impl(
+    model_catalog_path: str,
+    model_name: str,
+    datasets: list[DatasetRef],
+    conditions: list[ConditionRequest],
+    output_dir: str | None,
+    envelope: dict[str, float] | None,
+    run_dir_prefix: str,
+) -> dict[str, Any]:
+    try:
+        model = Model(model_name, model_catalog_path)
+        dataset_map: dict[str, Dataset] = {
+            ds.name: Dataset(ds.name, model, ds.filter_expression) for ds in datasets
+        }
+
+        spec = Specification(name="prosuite-mcp verification")
+        for cond_req in conditions:
+            spec.add_condition(_build_condition(cond_req, dataset_map))
+    except ValueError as exc:
+        return {"status": "error", "engine_confirmed": False, "error": str(exc)}
+
+    return _verify_and_summarize(spec, run_dir_prefix, output_dir, envelope)
+
+
 def run_xml_verification_impl(
     spec_path: str,
     specification_name: str,
@@ -236,38 +250,4 @@ def run_xml_verification_impl(
             "error": f"Failed to load spec: {exc}",
         }
 
-    perimeter = None
-    if envelope:
-        perimeter = EnvelopePerimeter(
-            x_min=envelope["x_min"],
-            y_min=envelope["y_min"],
-            x_max=envelope["x_max"],
-            y_max=envelope["y_max"],
-        )
-
-    if output_dir is None:
-        output_dir = str(_make_run_dir(specification_name, Path.cwd() / "runs"))
-
-    service = _make_service()
-
-    try:
-        outcome, verified_spec = _run_verify(service, xml_spec, output_dir, perimeter)
-    except grpc.RpcError as exc:
-        return {
-            "status": "error",
-            "engine_confirmed": False,
-            "error": f"gRPC {exc.code()}: {exc.details()}",
-        }
-
-    if verified_spec is None:
-        return {
-            "status": "error",
-            "engine_confirmed": False,
-            "error": _failure_reason(outcome),
-            "issues_seen_in_stream": outcome.total,
-        }
-
-    summary = _summarize(verified_spec, outcome)
-    summary["status"] = "success"
-    summary["output_dir"] = output_dir
-    return summary
+    return _verify_and_summarize(xml_spec, specification_name, output_dir, envelope)

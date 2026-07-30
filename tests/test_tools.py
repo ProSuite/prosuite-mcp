@@ -383,7 +383,7 @@ def test_run_verification_delegates_to_verification_impl():
     datasets = [DatasetRef(name="Roads")]
 
     with patch(
-        "prosuite_mcp.verification._run_verification_impl",
+        "prosuite_mcp.verification.run_verification_impl",
         return_value={"status": "success"},
     ) as mock_impl:
         result = run_verification(
@@ -415,7 +415,7 @@ def test_preview_condition_run_forwards_params_to_shared_impl():
     datasets = [DatasetRef(name="Roads")]
 
     with patch(
-        "prosuite_mcp.verification._run_verification_impl",
+        "prosuite_mcp.verification.run_verification_impl",
         return_value={"status": "success"},
     ) as mock_impl:
         result = preview_condition_run(

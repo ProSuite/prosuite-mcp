@@ -17,7 +17,7 @@ from prosuite.factories.quality_conditions import Conditions
 
 from .catalog import CATALOG, ParamInfo
 from .schemas import ConditionRequest, DatasetRef
-from .spec import _NS
+from .spec import NS
 
 
 def _resolve_param(raw: Any, p: ParamInfo, dataset_map: dict[str, Dataset]) -> Any:
@@ -41,7 +41,7 @@ def _resolve_param(raw: Any, p: ParamInfo, dataset_map: dict[str, Dataset]) -> A
     return dataset_map[raw]
 
 
-def _build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
+def build_condition(req: ConditionRequest, dataset_map: dict[str, Dataset]):
     info = CATALOG.get(req.condition)
     if info is None:
         raise ValueError(
@@ -74,7 +74,7 @@ def _build_condition_element(
     description: str = "",
 ) -> ET.Element:
     """Build a <QualityCondition> element from an already-built condition object."""
-    ns = _NS["qa"]
+    ns = NS["qa"]
 
     def q(tag: str) -> str:
         return f"{{{ns}}}{tag}"
@@ -122,11 +122,11 @@ def _find_descriptor_alias(root: ET.Element, test_descriptor: str) -> str | None
         return None
     class_stem, ctor = m.group(1), m.group(2)
 
-    td_root = root.find(f"{{{_NS['qa']}}}TestDescriptors")
+    td_root = root.find(f"{{{NS['qa']}}}TestDescriptors")
     if td_root is None:
         return None
-    for td in td_root.findall(f"{{{_NS['qa']}}}TestDescriptor"):
-        tc = td.find(f"{{{_NS['qa']}}}TestClass")
+    for td in td_root.findall(f"{{{NS['qa']}}}TestDescriptor"):
+        tc = td.find(f"{{{NS['qa']}}}TestClass")
         if tc is None:
             continue
         type_base = tc.get("type", "").rsplit(".", 1)[-1]
@@ -154,7 +154,7 @@ def add_condition(
     the full updated spec XML with the condition appended and wired into
     target_specification_name.
     """
-    ns = _NS["qa"]
+    ns = NS["qa"]
 
     def q(tag: str) -> str:
         return f"{{{ns}}}{tag}"
@@ -165,7 +165,7 @@ def add_condition(
         )
         for ds in datasets
     }
-    condition = _build_condition(condition_request, dataset_map)
+    condition = build_condition(condition_request, dataset_map)
 
     ET.register_namespace("", ns)
     root = ET.fromstring(spec_xml)

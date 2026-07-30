@@ -24,7 +24,7 @@ from prosuite.data_model import Dataset, Model
 from prosuite.quality import Specification
 from prosuite.verification.advanced_parameters import AdvancedParameters
 
-from prosuite_mcp.authoring import _build_condition
+from prosuite_mcp.authoring import build_condition
 from prosuite_mcp.schemas import ConditionRequest
 from prosuite_mcp.spec import get_spec_metadata, load_spec, search_spec
 
@@ -136,7 +136,7 @@ def corpus() -> CorpusStats:
                 for d in result["required_datasets"]
             }
             try:
-                condition = _build_condition(
+                condition = build_condition(
                     ConditionRequest(**result["condition_request"]), datasets
                 )
             except ValueError as exc:

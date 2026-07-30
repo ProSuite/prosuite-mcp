@@ -10,13 +10,13 @@ from prosuite.quality import Condition
 
 from prosuite_mcp import authoring
 from prosuite_mcp.authoring import (
-    _build_condition,
     _build_condition_element,
     _resolve_param,
     add_condition,
+    build_condition,
 )
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
-from prosuite_mcp.spec import _NS, _parse_condition
+from prosuite_mcp.spec import NS, _parse_condition
 
 # ---------------------------------------------------------------------------
 # _resolve_param
@@ -77,13 +77,13 @@ def test_resolve_param_dataset_list_single_string_coerced():
 
 
 # ---------------------------------------------------------------------------
-# _build_condition
+# build_condition
 # ---------------------------------------------------------------------------
 
 
 def test_build_condition_unknown():
     with pytest.raises(ValueError, match="Unknown condition"):
-        _build_condition(
+        build_condition(
             ConditionRequest(condition="no_such_condition_xyz", params={}),
             {},
         )
@@ -92,7 +92,7 @@ def test_build_condition_unknown():
 def test_build_condition_missing_param():
     dm = _make_dataset_map()
     with pytest.raises(ValueError, match="Missing parameter"):
-        _build_condition(
+        build_condition(
             ConditionRequest(condition="qa3d_constant_z_0", params={}),
             dm,
         )
@@ -101,7 +101,7 @@ def test_build_condition_missing_param():
 def test_build_condition_omits_defaulted_params():
     """qa_curve_0 defaults allowed_non_linear_segment_types and
     group_issues_by_segment_type, so a spec that omits them still builds."""
-    condition = _build_condition(
+    condition = build_condition(
         ConditionRequest(condition="qa_curve_0", params={"feature_class": "Roads"}),
         _make_dataset_map(),
     )
@@ -111,7 +111,7 @@ def test_build_condition_omits_defaulted_params():
 def test_build_condition_still_requires_params_without_defaults():
     """Only the factory's own defaults are filled in; nothing is invented."""
     with pytest.raises(ValueError, match="Missing parameter 'limit'"):
-        _build_condition(
+        build_condition(
             ConditionRequest(
                 condition="qa_min_length_1", params={"feature_class": "Roads"}
             ),
@@ -121,7 +121,7 @@ def test_build_condition_still_requires_params_without_defaults():
 
 def test_missing_param_error_lists_only_required_params():
     with pytest.raises(ValueError, match=r"Required: \['feature_class', 'limit'\]"):
-        _build_condition(
+        build_condition(
             ConditionRequest(condition="qa_min_length_1", params={}),
             _make_dataset_map(),
         )
@@ -130,7 +130,7 @@ def test_missing_param_error_lists_only_required_params():
 def test_build_condition_success():
     dm = _make_dataset_map()
 
-    condition = _build_condition(
+    condition = build_condition(
         ConditionRequest(
             condition="qa3d_constant_z_0",
             params={"feature_class": "Roads", "tolerance": 0.01},
@@ -160,7 +160,7 @@ def _condition_element(
     }
     return _build_condition_element(
         name,
-        _build_condition(condition_request, dataset_map),
+        build_condition(condition_request, dataset_map),
         workspace_id,
         test_descriptor,
         allow_errors,
@@ -186,7 +186,7 @@ def test_condition_element_round_trips_dataset_and_scalar_params():
     assert parsed.dataset_params[0].dataset_name == "lines"
     assert {s.py_name: s.value for s in parsed.scalar_params}["limit"] == "1.5"
     # workspace binding is emitted on the Dataset element
-    ds_el = el.find(".//qa:Dataset", _NS)
+    ds_el = el.find(".//qa:Dataset", NS)
     assert ds_el is not None and ds_el.get("workspace") == "DATA_OSM"
 
 
@@ -376,7 +376,7 @@ def test_add_condition_rejects_duplicate_name():
 
 def test_add_condition_builds_condition_once():
     with patch.object(
-        authoring, "_build_condition", wraps=authoring._build_condition
+        authoring, "build_condition", wraps=authoring.build_condition
     ) as mock_build:
         add_condition(
             spec_xml=_SPEC_FOR_AUTHORING,

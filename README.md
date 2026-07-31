@@ -16,14 +16,14 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 
 ## Usage
 
-Windows users: start at [docs/windows-setup.md](docs/windows-setup.md).
+Windows users: start at [docs/windows-setup.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/windows-setup.md).
 
-- CLI coding agents (Claude Code, Copilot CLI, opencode): see [docs/cli-clients.md](docs/cli-clients.md)
-- Any other MCP client (Claude Desktop, other GUI apps, or anything else): see [docs/gui-clients.md](docs/gui-clients.md)
+- CLI coding agents (Claude Code, Copilot CLI, opencode): see [docs/cli-clients.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/cli-clients.md)
+- Any other MCP client (Claude Desktop, other GUI apps, or anything else): see [docs/gui-clients.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/gui-clients.md)
 
 ## Tools
 
-Every tool is defined in [`src/prosuite_mcp/tools.py`](src/prosuite_mcp/tools.py): its docstring is the authoritative description, the same one your MCP client shows the LLM.
+Every tool is defined in [`src/prosuite_mcp/tools.py`](https://github.com/ProSuite/prosuite-mcp/blob/main/src/prosuite_mcp/tools.py): its docstring is the authoritative description, the same one your MCP client shows the LLM.
 
 ### Example
 
@@ -37,4 +37,4 @@ Without a spec, the assistant uses `list_conditions` and `describe_condition` to
 
 ## Development
 
-See [docs/development.md](docs/development.md).
+See [docs/development.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/development.md).

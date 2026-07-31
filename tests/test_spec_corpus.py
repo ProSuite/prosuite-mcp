@@ -35,9 +35,12 @@ pytestmark = pytest.mark.skipif(
     reason="set PROSUITE_SPEC_CORPUS to a directory of real .qa.xml files",
 )
 
-# A floor to raise as the handoff bugs get fixed, not a target. The corpus sits
-# at 0.9998: one condition, which omits both of its dataset parameters and so
-# has nothing to check, is meant to keep failing.
+# Share of the conditions search_spec offers that reach a serialized request.
+# Conditions it refuses to offer are not in the denominator, so this measures
+# whether what we advertise actually runs, not how much of a spec we support.
+# A floor to raise as the handoff bugs get fixed, not a target: the corpus sits
+# at 0.9998, the gap being one condition that omits both of its dataset
+# parameters and so has nothing to check, which is meant to keep failing.
 MIN_CLEAN_HANDOFF_RATE = 0.999
 
 # Never resolves (RFC 2606). Nothing connects, but localhost would be a real
@@ -52,6 +55,7 @@ class CorpusStats:
     built: int = 0
     clean: int = 0
     failures: Counter[str] = field(default_factory=Counter)
+    excluded: Counter[str] = field(default_factory=Counter)
     load_errors: list[str] = field(default_factory=list)
     metadata_errors: list[str] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)
@@ -84,17 +88,28 @@ def _classify(message: str) -> str:
     return "other"
 
 
+def _exclusion(reason: str) -> str:
+    """Collapse unsupported_reason, which names the descriptor, into a bucket."""
+    return "transformer" if "transformer" in reason else "no factory method"
+
+
 def _report(stats: CorpusStats) -> str:
+    total = stats.conditions + sum(stats.excluded.values())
     lines = [
         "",
         f"spec corpus: {len(stats.files)} unique files",
+        f"  conditions in the corpus          : {total}",
+    ]
+    for reason, count in stats.excluded.most_common():
+        lines.append(f"    not offered, {reason:<17}: {count}")
+    lines += [
         f"  conditions offered by search_spec : {stats.conditions}",
         f"  bind parameters                   : {stats.built}",
-        f"  reach a serialized request        : {stats.clean} ({stats.clean_rate:.0%})",
+        f"  reach a serialized request        : {stats.clean} ({stats.clean_rate:.2%})",
     ]
     for reason, count in stats.failures.most_common():
         share = count / stats.conditions if stats.conditions else 0
-        lines.append(f"    FAIL {reason:<20}: {count} ({share:.0%})")
+        lines.append(f"    FAIL {reason:<20}: {count} ({share:.2%})")
     lines.append(
         f"  specs referencing conditions but reporting no workspace ids: "
         f"{len(stats.specs_missing_workspaces)}"
@@ -129,6 +144,10 @@ def corpus() -> CorpusStats:
                     )
         except Exception as exc:
             stats.metadata_errors.append(f"{path.name}: {type(exc).__name__}: {exc}")
+
+        for condition in conditions:
+            if condition.unsupported:
+                stats.excluded[_exclusion(condition.unsupported_reason)] += 1
 
         for result in search_spec(conditions, "", max_results=10_000)["results"]:
             stats.conditions += 1

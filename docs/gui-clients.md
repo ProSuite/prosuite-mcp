@@ -10,3 +10,25 @@ The clients in [docs/cli-clients.md](cli-clients.md) all invoke `uv run prosuite
 | `pip`  | `pip install --user prosuite-mcp` | `pip show -f prosuite-mcp` (path is `Location` + the listed `../../../bin/prosuite-mcp`) |
 
 Register the resulting full path (e.g. `/home/you/.local/bin/prosuite-mcp`) as the command in your client's configuration, with `PROSUITE_HOST`/`PROSUITE_PORT`/`PROSUITE_SSL_CERT_PATH` as environment variables.
+
+## Finding the config file
+
+Open the config through the client's own "Edit Config" button. A path you found in documentation may exist and still not be the file the app reads, in which case editing it appears to work and changes nothing.
+
+## Windows paths in JSON
+
+Escaped backslashes and forward slashes both work; single backslashes are JSON escape sequences and do not.
+
+```json
+{
+  "mcpServers": {
+    "prosuite": {
+      "command": "C:\\Users\\<you>\\.local\\bin\\prosuite-mcp.exe",
+      "env": {
+        "PROSUITE_HOST": "localhost",
+        "PROSUITE_PORT": "5151"
+      }
+    }
+  }
+}
+```

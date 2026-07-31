@@ -348,9 +348,9 @@ def test_search_fills_omitted_scalar_list_with_empty_list(tmp_path):
     assert params["field_names"] == []
 
 
-def test_search_leaves_omitted_dataset_list_absent(tmp_path):
-    """An empty dataset list makes the condition vacuous, so it must fail
-    rather than quietly run against nothing."""
+def test_search_leaves_dataset_list_absent_when_nothing_is_bound(tmp_path):
+    """With no dataset at all the condition has nothing to check, so it must
+    fail rather than quietly run against nothing."""
     conditions = _single_condition_spec(
         tmp_path, "BorderSense(1)", '<Scalar parameter="clockwise" value="True" />'
     )
@@ -358,6 +358,23 @@ def test_search_leaves_omitted_dataset_list_absent(tmp_path):
     params = search_spec(conditions, "")["results"][0]["condition_request"]["params"]
 
     assert "polyline_classes" not in params
+
+
+def test_search_fills_omitted_dataset_list_when_another_dataset_is_bound(tmp_path):
+    """PseudoNodes without validPseudoNodes is the strictest form of the test,
+    not a vacuous one: no point class marks a pseudo node as valid, so every
+    pseudo node is reported. Three specs in the corpus are written this way."""
+    conditions = _single_condition_spec(
+        tmp_path,
+        "PseudoNodes(4)",
+        '<Dataset parameter="polylineClasses" value="Roads" workspace="w" />'
+        '<Scalar parameter="ignoreFieldLists" value="UUID" />',
+    )
+
+    params = search_spec(conditions, "")["results"][0]["condition_request"]["params"]
+
+    assert params["valid_pseudo_nodes"] == []
+    assert params["polyline_classes"] == ["Roads"]
 
 
 def test_absent_allow_errors_means_hard_error(tmp_path):

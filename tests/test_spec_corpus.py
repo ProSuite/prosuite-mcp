@@ -35,12 +35,9 @@ pytestmark = pytest.mark.skipif(
     reason="set PROSUITE_SPEC_CORPUS to a directory of real .qa.xml files",
 )
 
-# Share of the conditions search_spec offers that reach a serialized request.
-# Conditions it refuses to offer are not in the denominator, so this measures
-# whether what we advertise actually runs, not how much of a spec we support.
-# A floor to raise as the handoff bugs get fixed, not a target: the corpus sits
-# at 0.9998, the gap being one condition that omits both of its dataset
-# parameters and so has nothing to check, which is meant to keep failing.
+# Share of the conditions search_spec offers, not of the corpus, that reach a
+# serialized request. A floor to raise as bugs get fixed, not a target: the one
+# condition short of 1.0 omits both its datasets and is meant to keep failing.
 MIN_CLEAN_HANDOFF_RATE = 0.999
 
 # Never resolves (RFC 2606). Nothing connects, but localhost would be a real
@@ -89,7 +86,7 @@ def _classify(message: str) -> str:
 
 
 def _exclusion(reason: str) -> str:
-    """Collapse unsupported_reason, which names the descriptor, into a bucket."""
+    """Bucket unsupported_reason, which otherwise names the descriptor."""
     return "transformer" if "transformer" in reason else "no factory method"
 
 

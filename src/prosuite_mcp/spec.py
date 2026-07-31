@@ -319,19 +319,17 @@ def search_spec(
         for sp in c.scalar_params:
             params[sp.py_name] = sp.value
 
-        # A spec omits a list element entirely when the list is empty, e.g.
-        # RegularExpression with fieldListType=IgnoredFields and no fieldNames
-        # means "ignore none". An omitted dataset list reads the same way, but
-        # only while some other dataset is bound: PseudoNodes without
-        # validPseudoNodes reports every pseudo node, whereas a condition with
-        # no dataset at all has nothing to check and should fail loudly.
+        # A spec omits a list element when it is empty. Dataset lists too, but
+        # only while another dataset is bound: PseudoNodes without
+        # validPseudoNodes flags every pseudo node, while a condition with no
+        # dataset has nothing to check and should fail loudly.
         info = CATALOG.get(c.method)
         if info is not None:
-            bound_a_dataset = bool(c.dataset_params)
+            has_dataset = bool(c.dataset_params)
             for p in info.params:
                 if not p.is_list or p.has_default:
                     continue
-                if p.is_dataset and not bound_a_dataset:
+                if p.is_dataset and not has_dataset:
                     continue
                 params.setdefault(p.name, [])
 

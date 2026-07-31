@@ -168,7 +168,12 @@ def add_condition(
     condition = build_condition(condition_request, dataset_map)
 
     ET.register_namespace("", ns)
-    root = ET.fromstring(spec_xml)
+    try:
+        root = ET.fromstring(spec_xml)
+    except ET.ParseError as exc:
+        # ParseError subclasses SyntaxError, so it escapes anything catching the
+        # ValueError this module raises for every other bad input.
+        raise ValueError(f"Spec XML is not well-formed: {exc}") from exc
 
     qcs = root.find(q("QualityConditions"))
     if qcs is None:

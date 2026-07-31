@@ -328,6 +328,23 @@ def test_add_condition_reuses_descriptor_and_wires_element(tmp_path):
     assert "lines" in myspec["datasets"]
 
 
+def test_add_condition_rejects_malformed_xml_as_value_error():
+    """Every other bad input here raises ValueError; ET.ParseError subclasses
+    SyntaxError, so it would otherwise escape callers catching ValueError."""
+    with pytest.raises(ValueError, match="not well-formed"):
+        add_condition(
+            "MySpec",
+            "new cond",
+            ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 1.5},
+            ),
+            [DatasetRef(name="lines")],
+            "DATA_OSM",
+            "<not xml",
+        )
+
+
 def test_add_condition_rejects_missing_descriptor():
     with pytest.raises(ValueError, match="descriptor"):
         add_condition(

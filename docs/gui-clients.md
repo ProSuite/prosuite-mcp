@@ -13,23 +13,11 @@ Register the resulting full path (e.g. `/home/you/.local/bin/prosuite-mcp`) as t
 
 ## Finding the config file
 
-Use whatever "Edit Config" button the client offers rather than typing a documented path from memory. Claude Desktop on Windows is the cautionary case: installed from the Microsoft Store it reads
-
-```text
-C:\Users\<you>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json
-```
-
-while the path most guides name,
-
-```text
-C:\Users\<you>\AppData\Roaming\Claude\claude_desktop_config.json
-```
-
-also exists and is already populated, so editing it looks right and changes nothing. **Settings > Developer > Edit Config** opens the file the app actually reads.
+Open the config through the client's own "Edit Config" button. A path you found in documentation may exist and still not be the file the app reads, in which case editing it appears to work and changes nothing.
 
 ## Windows paths in JSON
 
-Both forms work, so pick either -- just don't use single backslashes, which JSON reads as escape sequences:
+Escaped backslashes and forward slashes both work; single backslashes are JSON escape sequences and do not.
 
 ```json
 {
@@ -44,5 +32,3 @@ Both forms work, so pick either -- just don't use single backslashes, which JSON
   }
 }
 ```
-
-Saving a valid entry is enough: the server shows up in the client without a reinstall, though some clients need a restart to re-read the file.

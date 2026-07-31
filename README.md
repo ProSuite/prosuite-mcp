@@ -16,7 +16,7 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 
 ## Usage
 
-Windows users: start at [docs/windows-setup.md](docs/windows-setup.md), which covers uv, client installation and the PowerShell differences.
+Windows users: start at [docs/windows-setup.md](docs/windows-setup.md).
 
 - CLI coding agents (Claude Code, Copilot CLI, opencode): see [docs/cli-clients.md](docs/cli-clients.md)
 - Any other MCP client (Claude Desktop, other GUI apps, or anything else): see [docs/gui-clients.md](docs/gui-clients.md)

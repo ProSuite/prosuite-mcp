@@ -14,6 +14,7 @@ from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.verification import (
     StreamOutcome,
     _decode_issue,
+    _failure_reason,
     _make_run_dir,
     _run_verify,
     _service_is_local,
@@ -177,6 +178,54 @@ def test_run_verify_ignores_messages_on_non_failed_responses():
     outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
 
     assert outcome.failure_messages == []
+
+
+def test_run_verify_records_the_terminal_status():
+    """Both silent failure modes end without a summary, so the status is the
+    only thing left that distinguishes them."""
+    responses = [
+        _fake_response([], status=ServiceStatus.status_1),
+        _fake_response([], status=ServiceStatus.status_2),
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert outcome.last_status == ServiceStatus.status_2
+
+
+def test_failure_reason_prefers_what_the_service_said():
+    outcome = StreamOutcome(
+        failure_messages=["Cannot find column [ART]."],
+        last_status=ServiceStatus.status_4,
+    )
+
+    assert _failure_reason(outcome) == "Cannot find column [ART]."
+
+
+def test_failure_reason_distinguishes_a_silent_rejection_from_a_cancelled_run():
+    """Measured against a live server: a dataset name that does not exist is
+    rejected with an empty message, and a bad field inside a constraint
+    expression streams issues and then cancels. Both used to report the same
+    unhelpful string."""
+    rejected = _failure_reason(StreamOutcome(last_status=ServiceStatus.status_4))
+    cancelled = _failure_reason(
+        StreamOutcome(total=1, last_status=ServiceStatus.status_2)
+    )
+
+    assert rejected != cancelled
+    assert "rejected" in rejected and "dataset name" in rejected
+    assert "cancelled" in cancelled and "field name" in cancelled
+    # Named causes are leads, not diagnoses: the service sent none.
+    assert "One known cause" in rejected and "One known cause" in cancelled
+    # The issues streamed before a cancel look like findings but are partial.
+    assert "not a complete result" in cancelled
+
+
+def test_failure_reason_falls_back_when_the_stream_just_stops():
+    assert _failure_reason(StreamOutcome()) == (
+        "Verification stream ended without a final summary."
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -91,6 +91,9 @@ class StreamOutcome:
     sample: list[dict[str, Any]] = field(default_factory=list)
     # What the service said when it gave up, e.g. why it rejected a spec.
     failure_messages: list[str] = field(default_factory=list)
+    # A rejection and a cancelled run both end without a summary. Only this
+    # separates them.
+    last_status: str | None = None
 
 
 def _run_verify(
@@ -107,6 +110,7 @@ def _run_verify(
     outcome = StreamOutcome()
     verified_spec = None
     for response in service.verify(spec, perimeter=perimeter, output_dir=output_dir):
+        outcome.last_status = response.service_call_status
         if response.service_call_status == ServiceStatus.status_4 and response.message:
             outcome.failure_messages.append(response.message)
         for issue in response.issues:
@@ -133,9 +137,24 @@ def _run_verify(
 
 
 def _failure_reason(outcome: StreamOutcome) -> str:
-    """Why the run produced no summary, in the service's own words if it said."""
+    """Why the run produced no summary, in the service's own words if it said.
+
+    It often does not. Named causes are leads we have observed, not diagnoses.
+    """
     if outcome.failure_messages:
         return " ".join(outcome.failure_messages)
+    if outcome.last_status == ServiceStatus.status_4:
+        return (
+            "The service rejected the run and sent no reason. One known cause "
+            "is a dataset name that is not in the workspace."
+        )
+    if outcome.last_status == ServiceStatus.status_2:
+        return (
+            f"The service cancelled the run after streaming {outcome.total} "
+            f"issue(s) and sent no final summary, so those issues are not a "
+            f"complete result. One known cause is a field name that does not "
+            f"exist in a condition's constraint expression."
+        )
     return "Verification stream ended without a final summary."
 
 
@@ -226,6 +245,8 @@ def _verify_and_summarize(
             "engine_confirmed": False,
             "error": _failure_reason(outcome),
             "issues_seen_in_stream": outcome.total,
+            # Lets a caller branch on the two without parsing the prose.
+            "service_status": outcome.last_status,
         }
 
     summary = _summarize(verified_spec, outcome)

@@ -293,14 +293,31 @@ def search_spec(
     matched = [
         c
         for c in conditions
-        if not c.unsupported
-        and (
-            q in c.name.lower() or q in c.description.lower() or q in c.category.lower()
-        )
+        if q in c.name.lower() or q in c.description.lower() or q in c.category.lower()
     ]
 
     results = []
     for c in matched[:max_results]:
+        entry = {
+            "name": c.name,
+            "category": c.category,
+            "allow_errors": c.allow_errors,
+            "description": c.description,
+        }
+
+        # Still worth browsing: run_xml_verification runs these natively, it is
+        # only the programmatic path that cannot build them. Omitting
+        # condition_request is what keeps them out of run_verification.
+        if c.unsupported:
+            results.append(
+                {
+                    **entry,
+                    "unsupported": True,
+                    "unsupported_reason": c.unsupported_reason,
+                }
+            )
+            continue
+
         params: dict = {}
         seen: set[str] = set()
         required_datasets: list[dict] = []
@@ -335,10 +352,7 @@ def search_spec(
 
         results.append(
             {
-                "name": c.name,
-                "category": c.category,
-                "allow_errors": c.allow_errors,
-                "description": c.description,
+                **entry,
                 "condition_request": {"condition": c.method, "params": params},
                 "required_datasets": required_datasets,
             }

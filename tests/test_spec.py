@@ -300,13 +300,28 @@ def test_must_intersect_other_list_params(must_intersect):
 
 def test_search_returns_total_matches(conditions):
     result = search_spec(conditions, "roads")
-    assert result["total_matches"] == 2  # transformer excluded
+    assert result["total_matches"] == 3  # includes the transformer condition
 
 
 def test_search_respects_max_results(conditions):
     result = search_spec(conditions, "roads", max_results=1)
     assert result["returned"] == 1
-    assert result["total_matches"] == 2
+    assert result["total_matches"] == 3
+
+
+def test_search_lists_unsupported_conditions_without_a_request(conditions):
+    """Hiding them made a whole spec unbrowsable through the tool that browses
+    it, while run_xml_verification runs them fine."""
+    results = search_spec(conditions, "roads")["results"]
+
+    unsupported = [r for r in results if r.get("unsupported")]
+
+    assert unsupported, "transformer condition should still be listed"
+    for r in unsupported:
+        assert "transformer" in r["unsupported_reason"]
+        assert "condition_request" not in r  # cannot reach run_verification
+        assert "required_datasets" not in r
+        assert r["name"] and r["category"] is not None
 
 
 def test_search_no_match(conditions):
@@ -448,8 +463,8 @@ def test_allow_errors_on_condition_used_without_a_descriptor_entry(tmp_path):
 
 def test_search_by_category(conditions):
     result = search_spec(conditions, "buildings")
-    assert result["total_matches"] == 1
-    assert result["results"][0]["category"] == "Buildings"
+    assert result["total_matches"] == 2
+    assert {r["category"] for r in result["results"]} == {"Buildings"}
 
 
 def test_search_result_has_condition_request(conditions):

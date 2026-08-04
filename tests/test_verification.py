@@ -427,6 +427,36 @@ def test_run_verification_impl_exposes_sample_and_counts(tmp_path):
     assert result["sample_features"] == sample
 
 
+def test_run_verification_impl_keeps_the_sample_when_there_is_no_summary(tmp_path):
+    """A run that dies mid-stream says why in the issues it already sent, and
+    _failure_reason can only guess. Dropping them threw the answer away."""
+    sample = [
+        {
+            "issue_code": "",
+            "description": (
+                "Error testing QaConstraint0_lines: ... Cannot find column [ART]."
+            ),
+            "allowable": False,
+            "involved": [],
+        },
+    ]
+    outcome = StreamOutcome(
+        total=1, errors=1, sample=sample, last_status=ServiceStatus.status_2
+    )
+
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch("prosuite_mcp.verification._run_verify", return_value=(outcome, None)),
+        patch("prosuite_mcp.verification.Path") as mock_path,
+    ):
+        mock_path.cwd.return_value = tmp_path
+        result = _run_adhoc()
+
+    assert result["status"] == "error"
+    assert result["sample_features"] == sample
+    assert "Cannot find column [ART]" in result["sample_features"][0]["description"]
+
+
 def test_run_verification_impl_engine_confirmed_true_on_success(tmp_path):
     spec = _mock_verified_spec()
 

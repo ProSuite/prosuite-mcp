@@ -247,6 +247,9 @@ def _verify_and_summarize(
             "issues_seen_in_stream": outcome.total,
             # Lets a caller branch on the two without parsing the prose.
             "service_status": outcome.last_status,
+            # A run that failed mid-stream often explains itself here, in the
+            # service's own words, where _failure_reason can only guess.
+            "sample_features": outcome.sample,
         }
 
     summary = _summarize(verified_spec, outcome)

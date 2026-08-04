@@ -10,7 +10,8 @@ Usage:
 
 Environment variables:
     LLAMA_SERVER_URL  Base URL of llama-server  (default: http://localhost:8080/v1)
-    LLAMA_MODEL       Model name in requests     (default: local — llama-server ignores it)
+    LLAMA_MODEL       Model name in requests     (default: local, llama-server ignores it)
+    MAX_TOOL_ROUNDS   Tool rounds per question   (default: 12)
     PROSUITE_SPEC_PATH  Path to .qa.xml spec file (optional, loaded at startup)
     PROSUITE_HOST     ProSuite service host      (default: localhost)
     PROSUITE_PORT     ProSuite service port      (default: 5151)
@@ -28,6 +29,9 @@ from openai import OpenAI
 
 LLAMA_URL = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8080/v1")
 MODEL = os.environ.get("LLAMA_MODEL", "local")
+# Gemma 4 E4B used 6 rounds to author a condition, so this is headroom over a
+# real task rather than a guess.
+MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "12"))
 
 _SYSTEM_PROMPT = """\
 You are a ProSuite quality specification assistant with access to tools.
@@ -102,10 +106,15 @@ async def _turn(
     messages: list[dict],
     question: str,
 ) -> None:
-    """Append user question to shared history, run tool loop, append final reply."""
+    """Append user question to shared history, run tool loop, append final reply.
+
+    Bounded because the model decides when to stop: a run_xml_verification per
+    round is a real ProSuite verification, and a model that keeps calling tools
+    would keep triggering them.
+    """
     messages.append({"role": "user", "content": question})
 
-    while True:
+    for _ in range(MAX_TOOL_ROUNDS):
         resp = llm.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -125,6 +134,11 @@ async def _turn(
             result = await session.call_tool(tc.function.name, args)
             content = result.content[0].text if result.content else ""
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
+
+    print(
+        f"\nStopped at the {MAX_TOOL_ROUNDS}-round tool limit without a final "
+        f"answer. Raise MAX_TOOL_ROUNDS if the task legitimately needs more."
+    )
 
 
 _PROSUITE_ENV_VARS = [

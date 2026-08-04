@@ -416,7 +416,7 @@ def test_add_condition_builds_condition_once():
 
 _SPEC_NESTED = _SPEC_FOR_AUTHORING.replace(
     "  <QualityConditions>",
-    "  <Categories>\n    <Category name=\"Roads\">\n      <QualityConditions>",
+    '  <Categories>\n    <Category name="Roads">\n      <QualityConditions>',
 ).replace(
     "  </QualityConditions>",
     "      </QualityConditions>\n    </Category>\n  </Categories>",
@@ -489,3 +489,62 @@ def test_add_condition_rejects_a_duplicate_name_in_another_category():
             datasets=[DatasetRef(name="lines")],
             workspace_id="DATA_OSM",
         )
+
+
+_SPEC_TWO_CATEGORIES = _SPEC_NESTED.replace(
+    "    </Category>\n  </Categories>",
+    '    </Category>\n    <Category name="Buildings">\n'
+    "      <QualityConditions />\n    </Category>\n  </Categories>",
+)
+
+
+def _add(spec_xml: str, **kwargs) -> str:
+    return add_condition(
+        spec_xml=spec_xml,
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+        **kwargs,
+    )
+
+
+def test_add_condition_refuses_to_guess_between_categories():
+    """Document order would file it under whichever came first, invisibly."""
+    with pytest.raises(ValueError, match="ambiguous") as exc:
+        _add(_SPEC_TWO_CATEGORIES)
+
+    assert "'Buildings'" in str(exc.value) and "'Roads'" in str(exc.value)
+
+
+def test_add_condition_files_into_the_named_category():
+    updated = _add(_SPEC_TWO_CATEGORIES, category="Buildings")
+
+    cats = {
+        c.get("name"): [q.get("name") for q in c.iter(f"{{{NS['qa']}}}QualityCondition")]
+        for c in ET.fromstring(updated).iter(f"{{{NS['qa']}}}Category")
+    }
+    assert cats["Buildings"] == ["lines minlen"]
+    assert "lines minlen" not in cats["Roads"]
+
+
+def test_add_condition_rejects_an_unknown_category():
+    with pytest.raises(ValueError, match="no <QualityConditions> section") as exc:
+        _add(_SPEC_TWO_CATEGORIES, category="Nope")
+    assert "Available:" in str(exc.value)
+
+
+def test_add_condition_needs_no_category_when_only_one_nests():
+    assert "lines minlen" in _add(_SPEC_NESTED)
+
+
+def test_add_condition_ignores_category_when_a_root_level_list_exists():
+    updated = _add(_SPEC_FOR_AUTHORING, category="Roads")
+    top = ET.fromstring(updated).find(f"{{{NS['qa']}}}QualityConditions")
+    assert "lines minlen" in [
+        c.get("name") for c in top.findall(f"{{{NS['qa']}}}QualityCondition")
+    ]

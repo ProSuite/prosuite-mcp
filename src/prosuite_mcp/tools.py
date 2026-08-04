@@ -178,6 +178,7 @@ def add_condition_to_spec(
     allow_errors: bool = False,
     description: str = "",
     spec_xml: str | None = None,
+    category: str = "",
 ) -> dict[str, Any]:
     """Preview adding a new QualityCondition to a spec, reusing an existing descriptor.
 
@@ -198,6 +199,8 @@ def add_condition_to_spec(
         description: Optional description element.
         spec_xml: Spec XML text; defaults to reading the active spec (the one
             load_spec was last called with, otherwise PROSUITE_SPEC_PATH).
+        category: Which category to file the condition under. Only needed when
+            the spec nests QualityConditions under more than one.
 
     Returns 'status': 'ok' with 'spec_xml' holding the updated spec, ready to
     review and persist yourself, or 'status': 'error'.
@@ -224,6 +227,7 @@ def add_condition_to_spec(
             spec_xml,
             allow_errors,
             description,
+            category,
         )
     except Exception as exc:
         # Not just ValueError: malformed spec_xml surfaces as ET.ParseError,

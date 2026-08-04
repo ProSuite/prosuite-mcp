@@ -137,18 +137,38 @@ def _find_descriptor_alias(root: ET.Element, test_descriptor: str) -> str | None
     return None
 
 
-def _find_quality_conditions(root: ET.Element) -> ET.Element | None:
+def _find_quality_conditions(root: ET.Element, category: str = "") -> ET.Element:
     """The <QualityConditions> list to append to, root level preferred.
 
-    19 of 43 specs in a real corpus nest it inside a <Category>, where a
-    root-level find misses it and authoring fails on the whole file.
+    Specs nest it under a <Category>, sometimes several, and document order is
+    no basis for picking one.
     """
     tag = f"{{{NS['qa']}}}QualityConditions"
     direct = root.find(tag)
+    # An empty Element is falsy, so this cannot collapse into an `or`.
     if direct is not None:
         return direct
-    # An empty Element is falsy, so this cannot collapse into an `or`.
-    return next(iter(root.iter(tag)), None)
+
+    by_category = {
+        c.get("name", ""): qcs
+        for c in root.iter(f"{{{NS['qa']}}}Category")
+        if (qcs := c.find(tag)) is not None
+    }
+    if not by_category:
+        raise ValueError("Spec has no <QualityConditions> section.")
+    if category:
+        if category not in by_category:
+            raise ValueError(
+                f"Category {category!r} has no <QualityConditions> section. "
+                f"Available: {sorted(by_category)}"
+            )
+        return by_category[category]
+    if len(by_category) > 1:
+        raise ValueError(
+            f"Spec nests <QualityConditions> under several categories, so the "
+            f"target is ambiguous. Pass category as one of {sorted(by_category)}."
+        )
+    return next(iter(by_category.values()))
 
 
 def add_condition(
@@ -160,13 +180,15 @@ def add_condition(
     spec_xml: str,
     allow_errors: bool = False,
     description: str = "",
+    category: str = "",
 ) -> str:
     """Add a new QualityCondition to spec_xml, reusing an existing descriptor.
 
     Builds the condition through the same prosuite factory as run_verification,
     resolves a matching <TestDescriptor> (never synthesizes one), and returns
     the full updated spec XML with the condition appended and wired into
-    target_specification_name.
+    target_specification_name. category is only needed when the spec nests
+    <QualityConditions> under more than one <Category>.
     """
     ns = NS["qa"]
 
@@ -189,9 +211,7 @@ def add_condition(
         # ValueError this module raises for every other bad input.
         raise ValueError(f"Spec XML is not well-formed: {exc}") from exc
 
-    qcs = _find_quality_conditions(root)
-    if qcs is None:
-        raise ValueError("Spec has no <QualityConditions> section.")
+    qcs = _find_quality_conditions(root, category)
     # Names are the spec's cross-references, so they must be unique across every
     # list in the file, not just the one being appended to.
     if any(c.get("name") == name for c in root.iter(q("QualityCondition"))):

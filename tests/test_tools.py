@@ -239,6 +239,7 @@ def test_add_condition_to_spec_delegates_to_authoring_when_spec_xml_given():
         "<spec/>",
         False,
         "",
+        "",  # category
     )
     assert result == {"status": "ok", "spec_xml": "<xml/>"}
 

@@ -11,7 +11,7 @@ Usage:
 Environment variables:
     LLAMA_SERVER_URL  Base URL of llama-server  (default: http://localhost:8080/v1)
     LLAMA_MODEL       Model name in requests     (default: local, llama-server ignores it)
-    MAX_TOOL_ROUNDS   Tool rounds per question   (default: 12)
+    MAX_TOOL_CALLS    Tool calls per question    (default: 12)
     PROSUITE_SPEC_PATH  Path to .qa.xml spec file (optional, loaded at startup)
     PROSUITE_HOST     ProSuite service host      (default: localhost)
     PROSUITE_PORT     ProSuite service port      (default: 5151)
@@ -29,9 +29,9 @@ from openai import OpenAI
 
 LLAMA_URL = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8080/v1")
 MODEL = os.environ.get("LLAMA_MODEL", "local")
-# Gemma 4 E4B used 6 rounds to author a condition, so this is headroom over a
+# Gemma 4 E4B used 6 calls to author a condition, so this is headroom over a
 # real task rather than a guess.
-MAX_TOOL_ROUNDS = int(os.environ.get("MAX_TOOL_ROUNDS", "12"))
+MAX_TOOL_CALLS = int(os.environ.get("MAX_TOOL_CALLS", "12"))
 
 _SYSTEM_PROMPT = """\
 You are a ProSuite quality specification assistant with access to tools.
@@ -108,13 +108,14 @@ async def _turn(
 ) -> None:
     """Append user question to shared history, run tool loop, append final reply.
 
-    Bounded because the model decides when to stop: a run_xml_verification per
-    round is a real ProSuite verification, and a model that keeps calling tools
-    would keep triggering them.
+    Budgeted in calls, not rounds: one response may carry any number of them,
+    and each run_xml_verification is a real ProSuite verification. Refused calls
+    still get a tool result, or the next turn sends a history the API rejects.
     """
     messages.append({"role": "user", "content": question})
+    budget = MAX_TOOL_CALLS
 
-    for _ in range(MAX_TOOL_ROUNDS):
+    while True:
         resp = llm.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -129,16 +130,22 @@ async def _turn(
             return
 
         for tc in msg.tool_calls:
-            args = json.loads(tc.function.arguments)
-            print(f"  [tool] {tc.function.name}({json.dumps(args)})", flush=True)
-            result = await session.call_tool(tc.function.name, args)
-            content = result.content[0].text if result.content else ""
+            if budget:
+                budget -= 1
+                args = json.loads(tc.function.arguments)
+                print(f"  [tool] {tc.function.name}({json.dumps(args)})", flush=True)
+                result = await session.call_tool(tc.function.name, args)
+                content = result.content[0].text if result.content else ""
+            else:
+                content = "Not executed: this question's tool budget is used up."
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
 
-    print(
-        f"\nStopped at the {MAX_TOOL_ROUNDS}-round tool limit without a final "
-        f"answer. Raise MAX_TOOL_ROUNDS if the task legitimately needs more."
-    )
+        if not budget:
+            print(
+                f"\nStopped at the {MAX_TOOL_CALLS}-call tool budget without a "
+                f"final answer. Raise MAX_TOOL_CALLS if the task needs more."
+            )
+            return
 
 
 _PROSUITE_ENV_VARS = [

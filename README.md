@@ -20,6 +20,7 @@ Windows users: start at [docs/windows-setup.md](https://github.com/ProSuite/pros
 
 - CLI coding agents (Claude Code, Copilot CLI, opencode): see [docs/cli-clients.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/cli-clients.md)
 - Any other MCP client (Claude Desktop, other GUI apps, or anything else): see [docs/gui-clients.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/gui-clients.md)
+- No coding agent permitted? An experimental example drives the same tools from any OpenAI-compatible LLM, local or hosted: see [docs/local-llm.md](https://github.com/ProSuite/prosuite-mcp/blob/main/docs/local-llm.md)
 
 ## Tools
 

@@ -550,3 +550,20 @@ def test_add_condition_ignores_category_when_a_root_level_list_exists():
     assert "lines minlen" in [
         c.get("name") for c in top.findall(f"{{{NS['qa']}}}QualityCondition")
     ]
+
+
+_SPEC_DUPLICATE_CATEGORIES = _SPEC_TWO_CATEGORIES.replace(
+    'name="Buildings"', 'name="Roads"'
+)
+
+
+def test_add_condition_sees_through_duplicate_category_names():
+    """Keyed by name, the second list would overwrite the first and the count
+    check would pass with one destination."""
+    with pytest.raises(ValueError, match="ambiguous"):
+        _add(_SPEC_DUPLICATE_CATEGORIES)
+
+
+def test_add_condition_rejects_a_category_name_used_twice():
+    with pytest.raises(ValueError, match="2 categories named 'Roads'"):
+        _add(_SPEC_DUPLICATE_CATEGORIES, category="Roads")

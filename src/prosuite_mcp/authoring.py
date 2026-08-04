@@ -149,26 +149,37 @@ def _find_quality_conditions(root: ET.Element, category: str = "") -> ET.Element
     if direct is not None:
         return direct
 
-    by_category = {
-        c.get("name", ""): qcs
+    # A list, not a dict: two categories may share a name, and collapsing them
+    # would hide the ambiguity this function exists to report.
+    candidates = [
+        (c.get("name", ""), qcs)
         for c in root.iter(f"{{{NS['qa']}}}Category")
         if (qcs := c.find(tag)) is not None
-    }
-    if not by_category:
+    ]
+    if not candidates:
         raise ValueError("Spec has no <QualityConditions> section.")
+    names = sorted({n for n, _ in candidates})
+
     if category:
-        if category not in by_category:
+        matched = [qcs for n, qcs in candidates if n == category]
+        if not matched:
             raise ValueError(
                 f"Category {category!r} has no <QualityConditions> section. "
-                f"Available: {sorted(by_category)}"
+                f"Available: {names}"
             )
-        return by_category[category]
-    if len(by_category) > 1:
+        if len(matched) > 1:
+            raise ValueError(
+                f"Spec has {len(matched)} categories named {category!r}, so the "
+                f"target is still ambiguous."
+            )
+        return matched[0]
+
+    if len(candidates) > 1:
         raise ValueError(
             f"Spec nests <QualityConditions> under several categories, so the "
-            f"target is ambiguous. Pass category as one of {sorted(by_category)}."
+            f"target is ambiguous. Pass category as one of {names}."
         )
-    return next(iter(by_category.values()))
+    return candidates[0][1]
 
 
 def add_condition(

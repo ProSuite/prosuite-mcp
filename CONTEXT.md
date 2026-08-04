@@ -25,6 +25,11 @@ Sends the XML spec to the ProSuite gRPC service as a string. The service interpr
 **Ad-hoc mode** (`run_verification`)
 Builds a `Specification` programmatically from individual `ConditionRequest` objects. Useful when no spec exists and the LLM constructs conditions from scratch using `list_conditions` and `describe_condition`. Prone to LLM semantic errors (picking wrong conditions, wrong parameters) and structurally cannot represent per-condition dataset filters.
 
+## Issue Results
+
+**Violation vs. unevaluable condition**
+The stream reports both as issues with `allowable=False`, distinguished only by `issue_code`. A violation carries a code naming the test (e.g. `Constraints.ConstraintNotFulfilled`) with the failing expression as its description. A condition the engine could not evaluate carries an empty code and a description beginning `Error testing`, for instance a constraint referencing a field the table does not have. ProSuite reports the latter per row and keeps going rather than aborting, which is deliberate: expression parameters are customer-specific and one misconfigured condition must not kill a long verification. Anything tallying issues without separating the two counts a broken condition as data errors.
+
 ## Tool Roles
 
 | Tool                                    | When to use                                                                                                                        |

@@ -1,8 +1,8 @@
 """
 Local LLM chat client for prosuite-mcp.
 
-Starts prosuite-mcp as a stdio subprocess and connects it to a local
-llama.cpp server via its OpenAI-compatible API.
+Starts prosuite-mcp as a stdio subprocess and drives it with any
+OpenAI-compatible endpoint: llama.cpp on this machine, or a hosted one.
 
 Usage:
     python examples/local_llm_chat.py              # interactive REPL
@@ -32,14 +32,22 @@ MODEL = os.environ.get("LLAMA_MODEL", "local")
 _SYSTEM_PROMPT = """\
 You are a ProSuite quality specification assistant with access to tools.
 
-Rules — follow these exactly:
+Rules, follow these exactly:
 - Call tools immediately and without asking for clarification.
-- For broad questions ("what categories are there?", "which conditions fail hard?",
-  "give me an overview"), call search_spec with query="" right away.
-- For topic-specific questions, call search_spec with a relevant keyword.
-- For parameter details on a single condition, call describe_condition.
-- Never say "I can use X to…" or "you can provide a keyword" — just call the tool.
-- If you already have the answer from context below, answer directly without a tool call.\
+- Never say "I can use X to..." or "you can provide a keyword", just call the tool.
+- If you already have the answer from context below, answer directly without a tool call.
+
+Which tool to call:
+- What the spec contains (specification names, workspace ids, datasets): describe_spec.
+- Finding conditions: search_spec with a keyword, or query="" for all of them.
+- Parameters of a single test: describe_condition.
+- Running checks: run_xml_verification, with the specification name and a workspace
+  path for every workspace id describe_spec reported. It runs the spec as written,
+  so prefer it whenever a spec is loaded.
+- run_verification builds conditions from scratch and cannot express per-condition
+  dataset filters. Use it only when no spec is loaded.
+- A search_spec result marked "unsupported" has no condition_request: run_xml_verification
+  runs it, run_verification cannot.\
 """
 
 
@@ -49,14 +57,21 @@ def _to_openai_tool(tool) -> dict:
         "function": {
             "name": tool.name,
             "description": tool.description or "",
-            "parameters": tool.inputSchema,
+            "parameters": tool.input_schema,
         },
     }
 
 
 async def _build_spec_context(session: ClientSession) -> str:
-    """Call search_spec("") once at startup and return a compact summary."""
-    result = await session.call_tool("search_spec", {"query": "", "max_results": 500})
+    """Call search_spec("") once at startup and return a compact summary.
+
+    Counts and categories only. Listing every condition reached ~9,000 tokens of
+    system prompt on a real spec, and the old max_results=500 silently dropped
+    the rest while still reporting the full total.
+    """
+    result = await session.call_tool(
+        "search_spec", {"query": "", "max_results": 10_000}
+    )
     raw = result.content[0].text if result.content else "{}"
     data = json.loads(raw)
     if "error" in data:
@@ -64,26 +79,18 @@ async def _build_spec_context(session: ClientSession) -> str:
 
     conditions = data.get("results", [])
     total = data.get("total_matches", len(conditions))
-    hard = [c for c in conditions if not c["allow_errors"]]
-    warn = [c for c in conditions if c["allow_errors"]]
+    hard = sum(1 for c in conditions if not c["allow_errors"])
     cats = Counter(c["category"] for c in conditions)
 
     lines = [
-        f"Loaded spec: {total} conditions total "
-        f"({len(hard)} hard failures, {len(warn)} warnings).",
+        f"Loaded spec: {total} conditions "
+        f"({hard} hard failures, {len(conditions) - hard} warnings).",
         "",
         "Categories:",
     ]
     for cat, count in sorted(cats.items()):
         lines.append(f"  {cat} ({count} conditions)")
-
-    lines += ["", "Hard-failure conditions:"]
-    for c in hard:
-        lines.append(f"  [{c['category']}] {c['name']}")
-
-    lines += ["", "Warning conditions (allow_errors=true):"]
-    for c in warn:
-        lines.append(f"  [{c['category']}] {c['name']}")
+    lines += ["", "Call search_spec with a keyword to see the conditions themselves."]
 
     return "\n".join(lines)
 

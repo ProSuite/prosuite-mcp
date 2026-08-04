@@ -525,7 +525,9 @@ def test_add_condition_files_into_the_named_category():
     updated = _add(_SPEC_TWO_CATEGORIES, category="Buildings")
 
     cats = {
-        c.get("name"): [q.get("name") for q in c.iter(f"{{{NS['qa']}}}QualityCondition")]
+        c.get("name"): [
+            q.get("name") for q in c.iter(f"{{{NS['qa']}}}QualityCondition")
+        ]
         for c in ET.fromstring(updated).iter(f"{{{NS['qa']}}}Category")
     }
     assert cats["Buildings"] == ["lines minlen"]

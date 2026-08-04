@@ -2,7 +2,7 @@
 Local LLM chat client for prosuite-mcp.
 
 Starts prosuite-mcp as a stdio subprocess and drives it with any
-OpenAI-compatible endpoint: llama.cpp on this machine, or a hosted one.
+OpenAI-compatible endpoint: f.e. llama.cpp on local machine, or a hosted one.
 
 Usage:
     python examples/local_llm_chat.py              # interactive REPL

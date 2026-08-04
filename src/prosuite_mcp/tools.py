@@ -126,6 +126,11 @@ def search_spec(query: str, max_results: int = 20) -> dict:
     - required_datasets: dataset names and filter expressions to include in
       run_verification's datasets list
 
+    A result carrying 'unsupported': True has neither of those last two: the
+    programmatic path cannot rebuild it (transformer preprocessing, or no
+    factory method). It is listed so browsing sees the whole spec, and it still
+    runs normally under run_xml_verification, which reads the spec as written.
+
     Searches whichever spec is active: the one load_spec was last called with,
     otherwise PROSUITE_SPEC_PATH. Returns 'status': 'ok' or 'error'.
     """

@@ -98,9 +98,9 @@ def _report(stats: CorpusStats) -> str:
         f"  conditions in the corpus          : {total}",
     ]
     for reason, count in stats.excluded.most_common():
-        lines.append(f"    not offered, {reason:<17}: {count}")
+        lines.append(f"    browse only, {reason:<17}: {count}")
     lines += [
-        f"  conditions offered by search_spec : {stats.conditions}",
+        f"  search_spec offers for ad-hoc     : {stats.conditions}",
         f"  bind parameters                   : {stats.built}",
         f"  reach a serialized request        : {stats.clean} ({stats.clean_rate:.2%})",
     ]
@@ -147,6 +147,8 @@ def corpus() -> CorpusStats:
                 stats.excluded[_exclusion(condition.unsupported_reason)] += 1
 
         for result in search_spec(conditions, "", max_results=10_000)["results"]:
+            if result.get("unsupported"):
+                continue  # listed for browsing, deliberately has no request
             stats.conditions += 1
             model = Model("corpus", "corpus")
             datasets = {

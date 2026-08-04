@@ -137,6 +137,20 @@ def _find_descriptor_alias(root: ET.Element, test_descriptor: str) -> str | None
     return None
 
 
+def _find_quality_conditions(root: ET.Element) -> ET.Element | None:
+    """The <QualityConditions> list to append to, root level preferred.
+
+    19 of 43 specs in a real corpus nest it inside a <Category>, where a
+    root-level find misses it and authoring fails on the whole file.
+    """
+    tag = f"{{{NS['qa']}}}QualityConditions"
+    direct = root.find(tag)
+    if direct is not None:
+        return direct
+    # An empty Element is falsy, so this cannot collapse into an `or`.
+    return next(iter(root.iter(tag)), None)
+
+
 def add_condition(
     target_specification_name: str,
     name: str,
@@ -175,10 +189,12 @@ def add_condition(
         # ValueError this module raises for every other bad input.
         raise ValueError(f"Spec XML is not well-formed: {exc}") from exc
 
-    qcs = root.find(q("QualityConditions"))
+    qcs = _find_quality_conditions(root)
     if qcs is None:
         raise ValueError("Spec has no <QualityConditions> section.")
-    if any(c.get("name") == name for c in qcs.findall(q("QualityCondition"))):
+    # Names are the spec's cross-references, so they must be unique across every
+    # list in the file, not just the one being appended to.
+    if any(c.get("name") == name for c in root.iter(q("QualityCondition"))):
         raise ValueError(f"Spec already has a QualityCondition named {name!r}.")
 
     alias = _find_descriptor_alias(root, condition.test_descriptor)

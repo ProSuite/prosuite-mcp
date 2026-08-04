@@ -408,3 +408,84 @@ def test_add_condition_builds_condition_once():
         )
 
     assert mock_build.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# <QualityConditions> nested inside a <Category>
+# ---------------------------------------------------------------------------
+
+_SPEC_NESTED = _SPEC_FOR_AUTHORING.replace(
+    "  <QualityConditions>",
+    "  <Categories>\n    <Category name=\"Roads\">\n      <QualityConditions>",
+).replace(
+    "  </QualityConditions>",
+    "      </QualityConditions>\n    </Category>\n  </Categories>",
+)
+
+
+def test_add_condition_finds_quality_conditions_inside_a_category(tmp_path):
+    """19 of 43 specs in a real corpus nest it, and authoring used to fail on
+    every one of them with 'Spec has no <QualityConditions> section'."""
+    from prosuite_mcp.spec import load_spec as parse_spec
+
+    updated = add_condition(
+        spec_xml=_SPEC_NESTED,
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+    )
+
+    out = tmp_path / "nested.qa.xml"
+    out.write_text(updated, encoding="utf-8")
+    conditions = {c.name: c for c in parse_spec(str(out))}
+
+    assert "lines minlen" in conditions
+    # Appended into the category that held the list, so it inherits it.
+    assert conditions["lines minlen"].category == "Roads"
+
+
+def test_add_condition_prefers_a_root_level_list_over_a_nested_one():
+    """A spec keeping a top-level list should keep appending there rather than
+    into whichever category happens to come first."""
+    both = _SPEC_NESTED.replace(
+        "  <TestDescriptors>",
+        "  <QualityConditions />\n  <TestDescriptors>",
+    )
+
+    updated = add_condition(
+        spec_xml=both,
+        target_specification_name="MySpec",
+        name="lines minlen",
+        condition_request=ConditionRequest(
+            condition="qa_min_length_1",
+            params={"feature_class": "lines", "limit": 2.0},
+        ),
+        datasets=[DatasetRef(name="lines")],
+        workspace_id="DATA_OSM",
+    )
+
+    top = ET.fromstring(updated).find("qa:QualityConditions", NS)
+    names = [c.get("name") for c in top.findall("qa:QualityCondition", NS)]
+    assert names == ["lines minlen"]
+
+
+def test_add_condition_rejects_a_duplicate_name_in_another_category():
+    """Condition names are the spec's cross-references, so uniqueness is
+    file-wide; checking only the target list would allow a collision."""
+    with pytest.raises(ValueError, match="already has a QualityCondition"):
+        add_condition(
+            spec_xml=_SPEC_NESTED,
+            target_specification_name="MySpec",
+            name="Existing_Cond",
+            condition_request=ConditionRequest(
+                condition="qa_min_length_1",
+                params={"feature_class": "lines", "limit": 2.0},
+            ),
+            datasets=[DatasetRef(name="lines")],
+            workspace_id="DATA_OSM",
+        )

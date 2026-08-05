@@ -29,7 +29,7 @@ def _run_dir_name(name: str) -> str:
     # Token as well as a timestamp: two runs can share a second.
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
     safe = re.sub(r"[^\w-]", "_", name)
-    return f"{ts}_{token_hex(2)}_{safe}"
+    return f"{ts}_{token_hex(4)}_{safe}"
 
 
 def _make_run_dir(name: str, base: Path) -> Path:

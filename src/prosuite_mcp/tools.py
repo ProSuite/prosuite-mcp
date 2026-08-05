@@ -8,7 +8,7 @@ from typing import Any
 import anyio.from_thread
 from mcp.server.mcpserver import Context, MCPServer
 
-from . import authoring, verification, workspace
+from . import authoring, quickref, verification, workspace
 from .catalog import CATALOG
 from .schemas import ConditionRequest, DatasetRef, WorkspaceReplacement
 from .spec import get_loaded_conditions, get_spec_metadata, get_spec_path, set_spec
@@ -59,10 +59,22 @@ def list_conditions(search: str = "") -> str:
     query = search.lower()
     results = []
     for name, info in sorted(CATALOG.items()):
-        if query and query not in name and query not in info.docstring.lower():
+        entry = quickref.for_condition(name)
+        # Searching the Quick Reference too is most of its value here: it says
+        # "sliver polygons" where the docstring says what the code does.
+        haystack = "\n".join(
+            [
+                name,
+                info.docstring,
+                entry.title if entry else "",
+                entry.description if entry else "",
+            ]
+        ).lower()
+        if query and query not in haystack:
             continue
         first_line = info.docstring.split("\n")[0] if info.docstring else ""
-        results.append(f"{name}: {first_line}")
+        prefix = f"[{entry.category}] " if entry else ""
+        results.append(f"{prefix}{name}: {first_line}")
 
     if not results:
         return f"No conditions match {search!r}."
@@ -91,6 +103,14 @@ def describe_condition(name: str) -> str:
     lines = [f"condition: {info.method_name}", ""]
     if info.docstring:
         lines += [info.docstring, ""]
+
+    entry = quickref.for_condition(name)
+    if entry:
+        lines += [
+            f"quick reference: {entry.title} ({entry.category})",
+            entry.description,
+            "",
+        ]
 
     lines.append("parameters:")
     for p in info.params:

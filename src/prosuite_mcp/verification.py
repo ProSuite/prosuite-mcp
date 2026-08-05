@@ -32,24 +32,39 @@ def _run_dir_name(name: str) -> str:
     return f"{ts}_{token_hex(4)}_{safe}"
 
 
+_RUN_DIR_ATTEMPTS = 5
+
+
 def _make_run_dir(name: str, base: Path) -> Path:
-    path = base / _run_dir_name(name)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    """Reserve a run directory, rather than trust the name to be unique.
+
+    mkdir is atomic, so creating exclusively is what makes the directory ours;
+    exist_ok would hand the same one to two runs and put them back in the
+    Issues.gdb conflict.
+    """
+    base.mkdir(parents=True, exist_ok=True)
+    for _ in range(_RUN_DIR_ATTEMPTS):
+        path = base / _run_dir_name(name)
+        try:
+            path.mkdir()
+        except FileExistsError:
+            continue
+        return path
+    raise RuntimeError(f"No free run directory under {base} after {_RUN_DIR_ATTEMPTS}")
 
 
 def _run_subdir(base: str, name: str) -> str:
     """A run of its own under a caller-supplied output_dir, so a reused one
     does not collide on an Issues.gdb the service will not overwrite.
 
-    base belongs to the service's machine, hence the hand-rolled join and the
-    mkdir only when that machine is this one.
+    Only a local service shares our filesystem, so only there can the
+    directory be reserved. Remote we name it and the service creates it, where
+    a repeated name would fail the run loudly rather than merge two of them.
     """
-    sep = "\\" if "\\" in base and "/" not in base else "/"
-    path = base.rstrip("/\\") + sep + _run_dir_name(name)
     if _service_is_local():
-        Path(path).mkdir(parents=True, exist_ok=True)
-    return path
+        return str(_make_run_dir(name, Path(base)))
+    sep = "\\" if "\\" in base and "/" not in base else "/"
+    return base.rstrip("/\\") + sep + _run_dir_name(name)
 
 
 def _service_is_local() -> bool:

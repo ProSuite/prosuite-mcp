@@ -315,6 +315,27 @@ def test_make_run_dir_sanitizes_spaces_and_special_chars(tmp_path):
     assert "/" not in result.name
 
 
+def test_make_run_dir_retries_a_name_already_taken(tmp_path):
+    """Two runs must never share a directory, however the name was generated."""
+    with patch(
+        "prosuite_mcp.verification._run_dir_name",
+        side_effect=["taken", "taken", "free"],
+    ):
+        first = _make_run_dir("MySpec", tmp_path)
+        second = _make_run_dir("MySpec", tmp_path)
+
+    assert (first.name, second.name) == ("taken", "free")
+
+
+def test_make_run_dir_gives_up_rather_than_share_a_directory(tmp_path):
+    with (
+        patch("prosuite_mcp.verification._run_dir_name", return_value="taken"),
+        pytest.raises(RuntimeError, match="No free run directory"),
+    ):
+        _make_run_dir("MySpec", tmp_path)
+        _make_run_dir("MySpec", tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # run_verification_impl (ad-hoc mode, shared by run_verification /
 # preview_condition_run)

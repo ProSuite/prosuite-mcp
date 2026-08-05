@@ -99,6 +99,58 @@ def test_a_dataset_fiona_cannot_type_still_reports_the_rest(gdb, monkeypatch):
     assert [f["name"] for f in result["fields"]] == ["kind", "height"]
 
 
+def test_a_dataset_that_cannot_be_counted_still_reports_the_rest(gdb, monkeypatch):
+    """fiona raises TypeError, not a FionaError, so this used to leave the tool
+    rather than come back as a result."""
+    monkeypatch.setattr(
+        fiona.Collection,
+        "__len__",
+        lambda self: (_ for _ in ()).throw(
+            TypeError("Layer does not support counting")
+        ),
+    )
+
+    result = describe_dataset(gdb, "points")
+
+    assert result["feature_count"] is None
+    assert [f["name"] for f in result["fields"]] == ["kind", "height"]
+
+
+def test_a_failing_retry_is_still_a_workspace_error(gdb, monkeypatch):
+    """The retry runs inside the first handler, so its errors need converting
+    too or the tool raises instead of returning a status."""
+
+    def fake_open(*args, **kwargs):
+        if kwargs.get("ignore_geometry"):
+            raise fiona.errors.DriverError("boom")
+        raise fiona.errors.UnsupportedGeometryTypeError(2147483648)
+
+    monkeypatch.setattr("prosuite_mcp.workspace.fiona.open", fake_open)
+
+    with pytest.raises(WorkspaceError, match="boom"):
+        describe_dataset(gdb, "points")
+
+
+def test_a_table_without_geometry_can_be_described(tmp_path):
+    """No geometry means no extent, which must not read as a failure."""
+    path = tmp_path / "notrs.gdb"
+    with fiona.open(
+        path,
+        "w",
+        driver="OpenFileGDB",
+        layer="lookup",
+        schema={"geometry": "None", "properties": {"code": "int32"}},
+    ) as dst:
+        dst.write({"geometry": None, "properties": {"code": 100}})
+
+    result = describe_dataset(str(path), "lookup")
+
+    assert result["geometry_type"] == "None"
+    assert result["extent"] is None
+    assert result["spatial_reference"] is None
+    assert [f["name"] for f in result["fields"]] == ["code"]
+
+
 def test_a_table_without_geometry_is_still_listed(tmp_path):
     """ProSuite tests tables too, so they must not drop out of the listing."""
     path = tmp_path / "tables.gdb"

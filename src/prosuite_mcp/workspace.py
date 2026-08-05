@@ -30,46 +30,68 @@ def _crs(collection: fiona.Collection) -> dict[str, Any] | None:
 
 
 def _fields(collection: fiona.Collection) -> list[dict[str, Any]]:
+    schema = collection.schema or {}
     fields = []
-    for name, spec in collection.schema["properties"].items():
+    for name, spec in (schema.get("properties") or {}).items():
         kind, _, width = spec.partition(":")
-        field = {"name": name, "type": kind}
+        field: dict[str, Any] = {"name": name, "type": kind}
         if width:
             field["width"] = int(width)
         fields.append(field)
     return fields
 
 
-def _summarize(collection: fiona.Collection, geometry_type: str) -> dict[str, Any]:
-    return {
+def _extent(
+    collection: fiona.Collection, geometry_type: str
+) -> dict[str, float] | None:
+    # A table has no extent, and asking for one raises rather than saying so.
+    if geometry_type == "None":
+        return None
+    bounds = collection.bounds
+    if not bounds:
+        return None
+    x_min, y_min, x_max, y_max = bounds
+    return {"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max}
+
+
+def _feature_count(collection: fiona.Collection) -> int | None:
+    # fiona asks OGR not to scan, and raises TypeError where that means the
+    # driver cannot answer. Not knowing the count is not a failed read.
+    try:
+        return len(collection)
+    except TypeError:
+        return None
+
+
+def _shape(
+    collection: fiona.Collection, geometry_type: str, detail: bool
+) -> dict[str, Any]:
+    shaped = {
         "name": collection.name,
         "geometry_type": geometry_type,
-        "feature_count": len(collection),
+        "feature_count": _feature_count(collection),
         "spatial_reference": _crs(collection),
     }
+    if detail:
+        shaped["extent"] = _extent(collection, geometry_type)
+        shaped["fields"] = _fields(collection)
+    return shaped
 
 
 def _read(path: str, layer: str, detail: bool) -> dict[str, Any]:
+    # Nested, so a FionaError from the retry is converted too. A sibling
+    # handler would not see it: it is raised while the first one is running.
     try:
-        with fiona.open(path, layer=layer) as c:
-            summary = _summarize(c, c.schema["geometry"])
-            extra = _detail(c) if detail else {}
-    except UnsupportedGeometryTypeError:
-        # A type fiona has no name for. "None" is taken: it means no geometry.
-        with fiona.open(path, layer=layer, ignore_geometry=True) as c:
-            summary = _summarize(c, "Unknown")
-            extra = _detail(c) if detail else {}
+        try:
+            with fiona.open(path, layer=layer) as c:
+                schema = c.schema or {}
+                return _shape(c, schema.get("geometry") or "Unknown", detail)
+        except UnsupportedGeometryTypeError:
+            # A type fiona has no name for. "None" is taken: it means no geometry.
+            with fiona.open(path, layer=layer, ignore_geometry=True) as c:
+                return _shape(c, "Unknown", detail)
     except FionaError as exc:
         raise WorkspaceError(f"Cannot read {layer!r} in {path}: {exc}") from exc
-    return {**summary, **extra}
-
-
-def _detail(collection: fiona.Collection) -> dict[str, Any]:
-    x_min, y_min, x_max, y_max = collection.bounds
-    return {
-        "extent": {"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max},
-        "fields": _fields(collection),
-    }
 
 
 def list_datasets(workspace_path: str) -> dict[str, Any]:

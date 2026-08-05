@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from itertools import count
 from pathlib import Path
 from typing import Any
 
-from mcp.server.mcpserver import MCPServer
+import anyio.from_thread
+from mcp.server.mcpserver import Context, MCPServer
 
 from . import authoring, verification
 from .catalog import CATALOG
@@ -22,6 +25,25 @@ def _error(message: str) -> dict[str, Any]:
     """Every tool that returns a dict reports failure this way, so a caller can
     check status without knowing which tool it called."""
     return {"status": "error", "error": message}
+
+
+def _progress_relay(ctx: Context | None) -> Callable[[str], None] | None:
+    """Relay the service's messages during a run, so the client does not time
+    the request out. Tools run in a worker thread, hence from_thread.
+    """
+    if ctx is None:
+        return None
+
+    step = count(1)
+
+    def relay(message: str) -> None:
+        try:
+            anyio.from_thread.run(ctx.report_progress, next(step), None, message)
+        except RuntimeError:
+            # No portal. Progress is not worth failing a run over.
+            pass
+
+    return relay
 
 
 @mcp.tool()
@@ -245,6 +267,7 @@ def run_verification(
     conditions: list[ConditionRequest],
     output_dir: str | None = None,
     envelope: dict[str, float] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """
     Run a ProSuite quality verification.
@@ -278,8 +301,8 @@ def run_verification(
             Omit for full-extent verification.
 
     Returns a summary with status, total_errors, and per-condition
-    breakdown. Check 'status': 'error' for connection or parameter
-    failures.
+    breakdown, plus 'service_messages': what the service warned about during
+    the run. Check 'status': 'error' for connection or parameter failures.
     """
     return verification.run_verification_impl(
         model_catalog_path,
@@ -289,6 +312,7 @@ def run_verification(
         output_dir,
         envelope,
         "adhoc",
+        _progress_relay(ctx),
     )
 
 
@@ -300,6 +324,7 @@ def preview_condition_run(
     workspace_id: str,
     output_dir: str | None = None,
     envelope: dict[str, float] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Run a single proposed condition ad-hoc and show what it actually flags.
 
@@ -334,6 +359,7 @@ def preview_condition_run(
         output_dir,
         envelope,
         "preview",
+        _progress_relay(ctx),
     )
 
 
@@ -343,6 +369,7 @@ def run_xml_verification(
     data_source_replacements: list[WorkspaceReplacement],
     output_dir: str | None = None,
     envelope: dict[str, float] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """
     Run a ProSuite quality verification directly from the loaded XML spec file.
@@ -390,4 +417,5 @@ def run_xml_verification(
         replacements,
         output_dir,
         envelope,
+        _progress_relay(ctx),
     )

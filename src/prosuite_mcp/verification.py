@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ import grpc
 from prosuite import EnvelopePerimeter, Service
 from prosuite.data_model import Dataset, Model
 from prosuite.quality import Specification, XmlSpecification
-from prosuite.verification import ServiceStatus, VerifiedSpecification
+from prosuite.verification import MessageLevel, ServiceStatus, VerifiedSpecification
 
 from .authoring import build_condition
 from .config import load_config
@@ -106,6 +107,13 @@ def _decode_issue(issue: Any) -> dict[str, Any]:
 
 
 _SAMPLE_CAP = 10
+_MESSAGE_CAP = 50
+
+_DIAGNOSTIC_LEVELS = frozenset(
+    {MessageLevel.level_110000, MessageLevel.level_70000, MessageLevel.level_60000}
+)
+# Progress chatter, and the duplicates prosuite downgrades.
+_QUIET_LEVELS = frozenset({MessageLevel.level_30000, MessageLevel.level_10000})
 
 
 @dataclass
@@ -126,6 +134,8 @@ class StreamOutcome:
     sample: list[dict[str, Any]] = field(default_factory=list)
     # What the service said when it gave up, e.g. why it rejected a spec.
     failure_messages: list[str] = field(default_factory=list)
+    # Warnings and worse from anywhere in the run, not just its end.
+    service_messages: list[dict[str, str]] = field(default_factory=list)
     # A rejection and a cancelled run both end without a summary. Only this
     # separates them.
     last_status: str | None = None
@@ -136,18 +146,29 @@ def _run_verify(
     spec: Specification | XmlSpecification,
     output_dir: str,
     perimeter,
+    on_progress: Callable[[str], None] | None = None,
 ) -> tuple[StreamOutcome, VerifiedSpecification | None]:
     """Consume the verification stream once, aggregating into a StreamOutcome.
 
     Returns (outcome, final verified spec). Individual issues are tallied and
     dropped; only a bounded sample is retained.
+
+    on_progress sees each reported message as it arrives.
     """
     outcome = StreamOutcome()
     verified_spec = None
     for response in service.verify(spec, perimeter=perimeter, output_dir=output_dir):
         outcome.last_status = response.service_call_status
+        level = response.message_level
         if response.service_call_status == ServiceStatus.status_4 and response.message:
             outcome.failure_messages.append(response.message)
+        if response.message and level in _DIAGNOSTIC_LEVELS:
+            if len(outcome.service_messages) < _MESSAGE_CAP:
+                outcome.service_messages.append(
+                    {"level": level, "message": response.message}
+                )
+        if on_progress and response.message and level not in _QUIET_LEVELS:
+            on_progress(response.message)
         for issue in response.issues:
             outcome.total += 1
             if issue.allowable:
@@ -178,6 +199,9 @@ def _failure_reason(outcome: StreamOutcome) -> str:
     """
     if outcome.failure_messages:
         return " ".join(outcome.failure_messages)
+    if outcome.service_messages:
+        # The failing response is often empty; the warning came earlier.
+        return " ".join(m["message"] for m in outcome.service_messages)
     if outcome.last_status == ServiceStatus.status_4:
         return (
             "The service rejected the run and sent no reason. One known cause "
@@ -217,6 +241,7 @@ def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str,
         "issue_counts_by_code": outcome.counts_by_code,
         "issue_counts_by_table": outcome.counts_by_table,
         "unmatched_condition_errors": unmatched_errors,
+        "service_messages": outcome.service_messages,
         "sample_features": outcome.sample,
         "conditions": [
             {
@@ -238,6 +263,7 @@ def _verify_and_summarize(
     run_name: str,
     output_dir: str | None,
     envelope: dict[str, float] | None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Run a built specification and shape the result.
 
@@ -269,7 +295,9 @@ def _verify_and_summarize(
     service = _make_service()
 
     try:
-        outcome, verified_spec = _run_verify(service, spec, output_dir, perimeter)
+        outcome, verified_spec = _run_verify(
+            service, spec, output_dir, perimeter, on_progress
+        )
     except grpc.RpcError as exc:
         return {
             "status": "error",
@@ -285,6 +313,7 @@ def _verify_and_summarize(
             "issues_seen_in_stream": outcome.total,
             # Lets a caller branch on the two without parsing the prose.
             "service_status": outcome.last_status,
+            "service_messages": outcome.service_messages,
             # A run that failed mid-stream often explains itself here, in the
             # service's own words, where _failure_reason can only guess.
             "sample_features": outcome.sample,
@@ -304,6 +333,7 @@ def run_verification_impl(
     output_dir: str | None,
     envelope: dict[str, float] | None,
     run_dir_prefix: str,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     try:
         model = Model(model_name, model_catalog_path)
@@ -317,7 +347,9 @@ def run_verification_impl(
     except ValueError as exc:
         return {"status": "error", "engine_confirmed": False, "error": str(exc)}
 
-    return _verify_and_summarize(spec, run_dir_prefix, output_dir, envelope)
+    return _verify_and_summarize(
+        spec, run_dir_prefix, output_dir, envelope, on_progress
+    )
 
 
 def run_xml_verification_impl(
@@ -326,6 +358,7 @@ def run_xml_verification_impl(
     replacements: list[list[str]],
     output_dir: str | None,
     envelope: dict[str, float] | None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     try:
         xml_spec = XmlSpecification(spec_path, specification_name, replacements)
@@ -336,4 +369,6 @@ def run_xml_verification_impl(
             "error": f"Failed to load spec: {exc}",
         }
 
-    return _verify_and_summarize(xml_spec, specification_name, output_dir, envelope)
+    return _verify_and_summarize(
+        xml_spec, specification_name, output_dir, envelope, on_progress
+    )

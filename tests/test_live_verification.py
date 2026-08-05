@@ -129,3 +129,43 @@ def test_xml_specification_runs_against_live_service(monkeypatch, restore_active
     assert result["engine_confirmed"] is True
     assert result["total_errors"] >= 1
     assert result["sample_features"], "expected at least one real flagged feature"
+
+
+def test_reusing_an_output_dir_does_not_collide_on_issues_gdb(monkeypatch):
+    """A second run into the same output_dir used to fail on an existing
+    Issues.gdb. Only this proves the service creates a run subdirectory we
+    cannot create ourselves when it is remote.
+
+    Needs PROSUITE_LIVE_OUTPUT_DIR, a directory writable on the service's
+    machine.
+    """
+    if not _server_reachable():
+        pytest.skip(f"ProSuite service not reachable at {_HOST}:{_PORT}")
+
+    base = os.environ.get("PROSUITE_LIVE_OUTPUT_DIR")
+    if not base:
+        pytest.skip("set PROSUITE_LIVE_OUTPUT_DIR to a server-writable directory")
+
+    monkeypatch.setenv("PROSUITE_HOST", _HOST)
+    monkeypatch.setenv("PROSUITE_PORT", str(_PORT))
+
+    def _run():
+        return run_verification(
+            model_catalog_path=_GDB1_PATH,
+            model_name="gdb1",
+            datasets=[DatasetRef(name="lines")],
+            conditions=[
+                ConditionRequest(
+                    condition="qa_min_length_1",
+                    params={"feature_class": "lines", "limit": 1_000_000},
+                )
+            ],
+            output_dir=base,
+        )
+
+    first, second = _run(), _run()
+
+    assert first["status"] == "success", first
+    assert second["status"] == "success", second
+    assert first["output_dir"] != second["output_dir"]
+    assert first["output_dir"].startswith(base.rstrip("/\\"))

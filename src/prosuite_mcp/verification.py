@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from secrets import token_hex
 from typing import Any
 
 import grpc
@@ -24,11 +25,30 @@ from .config import load_config
 from .schemas import ConditionRequest, DatasetRef
 
 
-def _make_run_dir(name: str, base: Path) -> Path:
+def _run_dir_name(name: str) -> str:
+    # Token as well as a timestamp: two runs can share a second.
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
     safe = re.sub(r"[^\w-]", "_", name)
-    path = base / f"{ts}_{safe}"
+    return f"{ts}_{token_hex(2)}_{safe}"
+
+
+def _make_run_dir(name: str, base: Path) -> Path:
+    path = base / _run_dir_name(name)
     path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _run_subdir(base: str, name: str) -> str:
+    """A run of its own under a caller-supplied output_dir, so a reused one
+    does not collide on an Issues.gdb the service will not overwrite.
+
+    base belongs to the service's machine, hence the hand-rolled join and the
+    mkdir only when that machine is this one.
+    """
+    sep = "\\" if "\\" in base and "/" not in base else "/"
+    path = base.rstrip("/\\") + sep + _run_dir_name(name)
+    if _service_is_local():
+        Path(path).mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -227,6 +247,9 @@ def _verify_and_summarize(
             if _service_is_local()
             else ""
         )
+    elif output_dir:
+        # A base to run under, not the run directory. Empty asks for no output.
+        output_dir = _run_subdir(output_dir, run_name)
 
     service = _make_service()
 

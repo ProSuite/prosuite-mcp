@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from prosuite.verification import (
+    MessageLevel,
     ServiceStatus,
     VerifiedCondition,
     VerifiedSpecification,
@@ -13,6 +14,7 @@ from prosuite.verification import (
 
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.verification import (
+    _MESSAGE_CAP,
     StreamOutcome,
     _decode_issue,
     _failure_reason,
@@ -104,17 +106,22 @@ def _fake_issue(code: str, table: str, allowable: bool, condition_id: int = 0):
 
 
 def _fake_response(
-    issues, verified_specification=None, status=ServiceStatus.status_1, message=""
+    issues,
+    verified_specification=None,
+    status=ServiceStatus.status_1,
+    message="",
+    message_level=MessageLevel.level_40000,
 ):
-    """Mirrors prosuite's VerificationResponse, which always carries a status
-    and a message alongside the issues. Statuses come from ServiceStatus so
-    these exercise the same comparison _run_verify makes: status_1 is Running,
-    status_3 Finished, status_4 Failed."""
+    """Mirrors prosuite's VerificationResponse, which always carries a status,
+    a message and its level alongside the issues. Statuses come from
+    ServiceStatus so these exercise the same comparison _run_verify makes:
+    status_1 is Running, status_3 Finished, status_4 Failed."""
     return SimpleNamespace(
         issues=issues,
         verified_specification=verified_specification,
         service_call_status=status,
         message=message,
+        message_level=message_level,
     )
 
 
@@ -181,6 +188,83 @@ def test_run_verify_ignores_messages_on_non_failed_responses():
     assert outcome.failure_messages == []
 
 
+def test_run_verify_keeps_warnings_from_a_run_that_succeeds():
+    """The service diagnoses a run as it goes, not only when it gives up."""
+    responses = [
+        _fake_response(
+            [],
+            status=ServiceStatus.status_1,
+            message="The FileGdb workspace 'Issues.gdb' already exists",
+            message_level=MessageLevel.level_60000,
+        ),
+        _fake_response(
+            [],
+            status=ServiceStatus.status_3,
+            verified_specification="SPEC",
+            message="Processing tile 2 of 2",
+        ),
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert outcome.service_messages == [
+        {
+            "level": MessageLevel.level_60000,
+            "message": "The FileGdb workspace 'Issues.gdb' already exists",
+        }
+    ]
+    assert outcome.failure_messages == []
+
+
+def test_run_verify_leaves_progress_chatter_out_of_service_messages():
+    responses = [
+        _fake_response([], message="Processing tile 1 of 9"),
+        _fake_response([], message="repeated", message_level=MessageLevel.level_30000),
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert outcome.service_messages == []
+
+
+def test_run_verify_caps_service_messages():
+    responses = [
+        _fake_response(
+            [], message=f"warning {i}", message_level=MessageLevel.level_60000
+        )
+        for i in range(_MESSAGE_CAP + 20)
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+
+    outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
+
+    assert len(outcome.service_messages) == _MESSAGE_CAP
+
+
+def test_run_verify_relays_messages_while_the_run_is_going():
+    """It has to fire during the stream, not once it has finished."""
+    responses = [
+        _fake_response([], message="Processing tile 1 of 2"),
+        _fake_response([], message="skip me", message_level=MessageLevel.level_10000),
+        _fake_response([], message="", message_level=MessageLevel.level_40000),
+        _fake_response([], message="Processing tile 2 of 2"),
+    ]
+    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
+    relayed: list[str] = []
+
+    _run_verify(
+        service,
+        spec=None,
+        output_dir="",
+        perimeter=None,
+        on_progress=relayed.append,
+    )
+
+    assert relayed == ["Processing tile 1 of 2", "Processing tile 2 of 2"]
+
+
 def test_run_verify_records_the_terminal_status():
     """Both silent failure modes end without a summary, so the status is the
     only thing left that distinguishes them."""
@@ -193,6 +277,24 @@ def test_run_verify_records_the_terminal_status():
     outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
 
     assert outcome.last_status == ServiceStatus.status_2
+
+
+def test_failure_reason_uses_a_warning_when_the_failure_itself_is_silent():
+    """Observed live: it warns on a Running response, then fails with an empty
+    message, so the canned prose was all a caller got."""
+    outcome = StreamOutcome(
+        last_status=ServiceStatus.status_4,
+        service_messages=[
+            {
+                "level": MessageLevel.level_60000,
+                "message": ("The FileGdb workspace 'C:/out/Issues.gdb' already exists"),
+            }
+        ],
+    )
+
+    assert _failure_reason(outcome) == (
+        "The FileGdb workspace 'C:/out/Issues.gdb' already exists"
+    )
 
 
 def test_failure_reason_prefers_what_the_service_said():

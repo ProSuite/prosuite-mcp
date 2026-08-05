@@ -7,11 +7,13 @@ in test_authoring.py / test_verification.py.
 import textwrap
 from unittest.mock import patch
 
+import anyio.to_thread
 import pytest
 
 from prosuite_mcp.catalog import CATALOG
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.tools import (
+    _progress_relay,
     add_condition_to_spec,
     describe_condition,
     describe_spec,
@@ -404,6 +406,7 @@ def test_run_verification_delegates_to_verification_impl():
         "C:/output",
         {"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
         "adhoc",
+        None,  # no Context outside a live MCP session
     )
     assert result == {"status": "success"}
 
@@ -436,6 +439,7 @@ def test_preview_condition_run_forwards_params_to_shared_impl():
         "C:/output",
         {"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
         "preview",
+        None,  # no Context outside a live MCP session
     )
     assert result == {"status": "success"}
 
@@ -480,5 +484,48 @@ def test_run_xml_verification_delegates_to_verification_impl(monkeypatch):
         [["DATA_OSM", "C:/data/osm.sde"]],
         "C:/output",
         {"x_min": 0, "y_min": 0, "x_max": 1, "y_max": 1},
+        None,  # no Context outside a live MCP session
     )
     assert result == {"status": "success"}
+
+
+# ---------------------------------------------------------------------------
+# _progress_relay
+# ---------------------------------------------------------------------------
+
+
+class _FakeContext:
+    def __init__(self):
+        self.calls = []
+
+    async def report_progress(self, progress, total=None, message=None):
+        self.calls.append((progress, total, message))
+
+
+@pytest.mark.asyncio
+async def test_progress_relay_reaches_the_event_loop_from_a_worker_thread():
+    """A sync tool body runs in a worker thread, so progress has to cross back
+    into the loop. Get it wrong and long runs stay silent."""
+    ctx = _FakeContext()
+    relay = _progress_relay(ctx)
+
+    def tool_body():
+        relay("Processing tile 1 of 2")
+        relay("Processing tile 2 of 2")
+
+    await anyio.to_thread.run_sync(tool_body)
+
+    assert ctx.calls == [
+        (1, None, "Processing tile 1 of 2"),
+        (2, None, "Processing tile 2 of 2"),
+    ]
+
+
+def test_progress_relay_survives_no_event_loop():
+    """Losing progress must never fail a verification."""
+    relay = _progress_relay(_FakeContext())
+    relay("Processing tile 1 of 2")
+
+
+def test_progress_relay_is_absent_without_a_context():
+    assert _progress_relay(None) is None

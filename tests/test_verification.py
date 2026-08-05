@@ -1,5 +1,6 @@
 """Unit tests for running verifications and shaping results. gRPC is mocked."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -314,6 +315,27 @@ def test_make_run_dir_sanitizes_spaces_and_special_chars(tmp_path):
     assert "/" not in result.name
 
 
+def test_make_run_dir_retries_a_name_already_taken(tmp_path):
+    """Two runs must never share a directory, however the name was generated."""
+    with patch(
+        "prosuite_mcp.verification._run_dir_name",
+        side_effect=["taken", "taken", "free"],
+    ):
+        first = _make_run_dir("MySpec", tmp_path)
+        second = _make_run_dir("MySpec", tmp_path)
+
+    assert (first.name, second.name) == ("taken", "free")
+
+
+def test_make_run_dir_gives_up_rather_than_share_a_directory(tmp_path):
+    with (
+        patch("prosuite_mcp.verification._run_dir_name", return_value="taken"),
+        pytest.raises(RuntimeError, match="No free run directory"),
+    ):
+        _make_run_dir("MySpec", tmp_path)
+        _make_run_dir("MySpec", tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # run_verification_impl (ad-hoc mode, shared by run_verification /
 # preview_condition_run)
@@ -554,7 +576,8 @@ def test_run_verification_impl_does_not_create_dir_on_invalid_condition():
     mock_make_run_dir.assert_not_called()
 
 
-def test_run_verification_impl_with_output_dir():
+def test_run_verification_impl_with_output_dir(monkeypatch):
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
     final_spec = _mock_verified_spec()
 
     with (
@@ -566,7 +589,7 @@ def test_run_verification_impl_with_output_dir():
         result = _run_adhoc(output_dir="C:/output")
 
     assert result["status"] == "success"
-    assert result["output_dir"] == "C:/output"
+    assert result["output_dir"].startswith("C:/output/")
 
 
 def test_run_verification_impl_auto_creates_output_dir(tmp_path):
@@ -629,7 +652,10 @@ def test_run_verification_impl_creates_a_local_dir_for_a_local_service(tmp_path)
     assert len(list((tmp_path / "runs").iterdir())) == 1
 
 
-def test_run_verification_impl_explicit_output_dir_not_overridden():
+def test_run_verification_impl_runs_under_an_explicit_output_dir(monkeypatch):
+    """A reused output_dir has to be a base: the service will not overwrite an
+    Issues.gdb that is already there."""
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
     final_spec = _mock_verified_spec()
 
     with (
@@ -639,9 +665,57 @@ def test_run_verification_impl_explicit_output_dir_not_overridden():
             return_value=(StreamOutcome(), final_spec),
         ),
     ):
-        result = _run_adhoc(output_dir="C:/my_dir")
+        first = _run_adhoc(output_dir="C:/my_dir")
+        second = _run_adhoc(output_dir="C:/my_dir")
 
-    assert result["output_dir"] == "C:/my_dir"
+    assert first["output_dir"].startswith("C:/my_dir/")
+    assert first["output_dir"] != second["output_dir"]
+
+
+def test_run_verification_impl_keeps_a_windows_separator(monkeypatch):
+    """output_dir belongs to the service's machine, which may spell paths
+    differently."""
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
+
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch(
+            "prosuite_mcp.verification._run_verify",
+            return_value=(StreamOutcome(), _mock_verified_spec()),
+        ),
+    ):
+        result = _run_adhoc(output_dir="C:\\my_dir")
+
+    assert result["output_dir"].startswith("C:\\my_dir\\")
+
+
+def test_run_verification_impl_empty_output_dir_asks_for_no_output(monkeypatch):
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
+
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch(
+            "prosuite_mcp.verification._run_verify",
+            return_value=(StreamOutcome(), _mock_verified_spec()),
+        ),
+    ):
+        result = _run_adhoc(output_dir="")
+
+    assert result["output_dir"] == ""
+
+
+def test_run_verification_impl_creates_the_run_dir_for_a_local_service(tmp_path):
+    with (
+        patch("prosuite_mcp.verification._make_service"),
+        patch(
+            "prosuite_mcp.verification._run_verify",
+            return_value=(StreamOutcome(), _mock_verified_spec()),
+        ),
+    ):
+        result = _run_adhoc(output_dir=str(tmp_path))
+
+    assert Path(result["output_dir"]).is_dir()
+    assert [p.name for p in tmp_path.iterdir()] == [Path(result["output_dir"]).name]
 
 
 # ---------------------------------------------------------------------------
@@ -804,7 +878,8 @@ def test_run_xml_verification_impl_surfaces_the_service_failure_message(tmp_path
     assert "invalid child element" in result["error"]
 
 
-def test_run_xml_verification_impl_output_dir_in_result():
+def test_run_xml_verification_impl_output_dir_in_result(monkeypatch):
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
     final_spec = _mock_xml_verified_spec()
 
     with (
@@ -824,7 +899,7 @@ def test_run_xml_verification_impl_output_dir_in_result():
         )
 
     assert result["status"] == "success"
-    assert result["output_dir"] == "C:/output"
+    assert result["output_dir"].startswith("C:/output/")
 
 
 def test_run_xml_verification_impl_auto_creates_output_dir(tmp_path):
@@ -852,8 +927,18 @@ def test_run_xml_verification_impl_auto_creates_output_dir(tmp_path):
     assert result["status"] == "success"
 
 
-def test_run_xml_verification_impl_explicit_output_dir_not_overridden():
+def test_run_xml_verification_impl_runs_under_an_explicit_output_dir(monkeypatch):
+    monkeypatch.setenv("PROSUITE_HOST", "203.0.113.10")
     final_spec = _mock_xml_verified_spec()
+
+    def _run():
+        return run_xml_verification_impl(
+            spec_path="/tmp/x.qa.xml",
+            specification_name="Spec_A",
+            replacements=[],
+            output_dir="C:/my_dir",
+            envelope=None,
+        )
 
     with (
         patch("prosuite_mcp.verification.XmlSpecification"),
@@ -863,12 +948,7 @@ def test_run_xml_verification_impl_explicit_output_dir_not_overridden():
             return_value=(StreamOutcome(), final_spec),
         ),
     ):
-        result = run_xml_verification_impl(
-            spec_path="/tmp/x.qa.xml",
-            specification_name="Spec_A",
-            replacements=[],
-            output_dir="C:/my_dir",
-            envelope=None,
-        )
+        first, second = _run(), _run()
 
-    assert result["output_dir"] == "C:/my_dir"
+    assert first["output_dir"].startswith("C:/my_dir/")
+    assert first["output_dir"] != second["output_dir"]

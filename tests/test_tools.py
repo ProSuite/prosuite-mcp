@@ -16,13 +16,16 @@ from prosuite_mcp.tools import (
     _progress_relay,
     add_condition_to_spec,
     describe_condition,
+    describe_dataset,
     describe_spec,
     list_conditions,
+    list_datasets,
     load_spec,
     preview_condition_run,
     run_verification,
     run_xml_verification,
 )
+from prosuite_mcp.workspace import WorkspaceError
 
 _MINIMAL_XML = textwrap.dedent("""\
     <?xml version="1.0" encoding="utf-8"?>
@@ -529,3 +532,44 @@ def test_progress_relay_survives_no_event_loop():
 
 def test_progress_relay_is_absent_without_a_context():
     assert _progress_relay(None) is None
+
+
+# ---------------------------------------------------------------------------
+# list_datasets / describe_dataset
+# ---------------------------------------------------------------------------
+
+
+def test_list_datasets_returns_ok_with_the_datasets():
+    with patch(
+        "prosuite_mcp.workspace.list_datasets",
+        return_value={
+            "workspace_path": "C:/d.gdb",
+            "driver": "OpenFileGDB",
+            "datasets": [],
+        },
+    ):
+        result = list_datasets("C:/d.gdb")
+
+    assert result["status"] == "ok"
+    assert result["driver"] == "OpenFileGDB"
+
+
+def test_list_datasets_turns_a_workspace_error_into_an_error_result():
+    """A missing GDAL or an unreadable path must not surface as a tool crash."""
+    with patch(
+        "prosuite_mcp.workspace.list_datasets",
+        side_effect=WorkspaceError("ogrinfo is not on PATH"),
+    ):
+        result = list_datasets("C:/d.gdb")
+
+    assert result == {"status": "error", "error": "ogrinfo is not on PATH"}
+
+
+def test_describe_dataset_turns_a_workspace_error_into_an_error_result():
+    with patch(
+        "prosuite_mcp.workspace.describe_dataset",
+        side_effect=WorkspaceError("No dataset named 'nope'"),
+    ):
+        result = describe_dataset("C:/d.gdb", "nope")
+
+    assert result["status"] == "error"

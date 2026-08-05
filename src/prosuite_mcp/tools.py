@@ -8,7 +8,7 @@ from typing import Any
 import anyio.from_thread
 from mcp.server.mcpserver import Context, MCPServer
 
-from . import authoring, verification
+from . import authoring, verification, workspace
 from .catalog import CATALOG
 from .schemas import ConditionRequest, DatasetRef, WorkspaceReplacement
 from .spec import get_loaded_conditions, get_spec_metadata, get_spec_path, set_spec
@@ -104,6 +104,53 @@ def describe_condition(name: str) -> str:
         lines.append(f"  {p.name} ({p.type_hint}) - {kind}, {required}")
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+def list_datasets(workspace_path: str) -> dict[str, Any]:
+    """
+    List the feature classes and tables in a geodatabase.
+
+    Returns each dataset's name, geometry type, feature count and spatial
+    reference, so conditions can be chosen from what the data actually is
+    instead of from its name. Call describe_dataset for the field list.
+
+    Reads the path on the machine running this MCP server, which is not
+    necessarily the one the ProSuite service resolves paths on.
+
+    Args:
+        workspace_path: File geodatabase path, e.g. 'C:/data/mydb.gdb'.
+
+    Returns 'status': 'ok' with 'datasets', or 'status': 'error'.
+    """
+    try:
+        return {"status": "ok", **workspace.list_datasets(workspace_path)}
+    except workspace.WorkspaceError as exc:
+        return _error(str(exc))
+
+
+@mcp.tool()
+def describe_dataset(workspace_path: str, name: str) -> dict[str, Any]:
+    """
+    Describe one feature class or table in a geodatabase.
+
+    Returns geometry type, feature count, extent, spatial reference and the
+    full field list with types. Use the field names to build constraint
+    expressions and filter_expression values that reference fields the data
+    actually has.
+
+    Reads the path on the machine running this MCP server.
+
+    Args:
+        workspace_path: File geodatabase path, e.g. 'C:/data/mydb.gdb'.
+        name: Dataset name as returned by list_datasets.
+
+    Returns 'status': 'ok' with the dataset detail, or 'status': 'error'.
+    """
+    try:
+        return {"status": "ok", **workspace.describe_dataset(workspace_path, name)}
+    except workspace.WorkspaceError as exc:
+        return _error(str(exc))
 
 
 @mcp.tool()

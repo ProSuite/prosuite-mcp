@@ -22,6 +22,7 @@ dependencies = [
     "prosuite>=1.7.0.0,<2",
     "mcp[cli]>=2.0,<3",
     "pydantic>=2.13,<3",
+    "fiona>=1.10.1",
 ]
 
 [project.optional-dependencies]

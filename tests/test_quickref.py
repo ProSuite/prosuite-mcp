@@ -1,5 +1,5 @@
 """Parsing the QA Quick Reference. The PDF is not ours to commit, so these
-cover the line handling; PROSUITE_QUICKREF points the loader at a real one."""
+cover the line handling rather than the document."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def test_an_unreachable_quick_reference_costs_only_the_descriptions(monkeypatch)
     """It enriches the catalog rather than gating it, so an air-gapped host
     still gets working tools."""
 
-    def unreachable(source):
+    def unreachable():
         raise OSError("Network is unreachable")
 
     monkeypatch.setattr("prosuite_mcp.quickref._fetch", unreachable)
@@ -114,9 +114,7 @@ def test_an_unreachable_quick_reference_costs_only_the_descriptions(monkeypatch)
     assert load() == {}
 
 
-def test_a_source_that_is_not_a_pdf_is_survived(monkeypatch, tmp_path):
-    junk = tmp_path / "not.pdf"
-    junk.write_text("this is not a pdf")
-    monkeypatch.setenv("PROSUITE_QUICKREF", str(junk))
+def test_a_response_that_is_not_a_pdf_is_survived(monkeypatch):
+    monkeypatch.setattr("prosuite_mcp.quickref._fetch", lambda: b"404 Not Found")
 
     assert load() == {}

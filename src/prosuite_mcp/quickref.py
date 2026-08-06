@@ -9,15 +9,17 @@ cannot go stale; when it cannot be fetched the catalog is simply what it was.
 from __future__ import annotations
 
 import io
-import os
 import re
+import threading
 import urllib.request
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
 _URL = "https://www.dirageosystems.ch/prosuite/doc/ProSuiteQA_QuickReference_en.pdf"
-_TIMEOUT_SECONDS = 30
+# Short, because this is an enrichment a caller is waiting on: better to lose
+# the descriptions than to hold up a condition lookup.
+_TIMEOUT_SECONDS = 10
 
 # Prose left, illustrations right. The header carries the family name, and
 # repeats on every page of it.
@@ -117,26 +119,32 @@ def parse(data: bytes) -> dict[str, QuickRefEntry]:
     return found
 
 
-def _fetch(source: str) -> bytes:
-    if source.startswith(("http://", "https://")):
-        with urllib.request.urlopen(source, timeout=_TIMEOUT_SECONDS) as response:
-            return response.read()
-    with open(source, "rb") as f:
-        return f.read()
+def _fetch() -> bytes:
+    with urllib.request.urlopen(_URL, timeout=_TIMEOUT_SECONDS) as response:
+        return response.read()
 
 
 @lru_cache(maxsize=1)
 def load() -> dict[str, QuickRefEntry]:
-    """Fetched once per process, on first use rather than at startup.
+    """Fetched and parsed once per process.
 
     Fails soft: the Quick Reference enriches the catalog and does not gate it,
     so an air-gapped host or a moved URL costs the descriptions, not the tools.
     """
-    source = os.environ.get("PROSUITE_QUICKREF", _URL)
     try:
-        return parse(_fetch(source))
+        return parse(_fetch())
     except Exception:
         return {}
+
+
+def warm() -> None:
+    """Start loading now, so the first condition lookup does not wait.
+
+    Downloading and parsing the document takes a couple of seconds, and a
+    caller would otherwise pay all of it. Daemon, because a slow fetch must
+    not hold the process open.
+    """
+    threading.Thread(target=load, daemon=True).start()
 
 
 def for_condition(method_name: str) -> QuickRefEntry | None:

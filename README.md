@@ -8,12 +8,11 @@ A running ProSuite Quality Verification Server reachable from the host where thi
 
 ## Configuration
 
-| Environment variable     | Default     | Description                                                                                          |
-| ------------------------ | ----------- | ---------------------------------------------------------------------------------------------------- |
-| `PROSUITE_HOST`          | `localhost` | ProSuite service host                                                                                |
-| `PROSUITE_PORT`          | `5151`      | ProSuite service port                                                                                |
-| `PROSUITE_SSL_CERT_PATH` | (none)      | Path to PEM certificate for TLS                                                                      |
-| `PROSUITE_QUICKREF`      | (published) | QA Quick Reference PDF, path or URL. Point at a local copy to work offline, or at the German edition |
+| Environment variable     | Default     | Description                     |
+| ------------------------ | ----------- | ------------------------------- |
+| `PROSUITE_HOST`          | `localhost` | ProSuite service host           |
+| `PROSUITE_PORT`          | `5151`      | ProSuite service port           |
+| `PROSUITE_SSL_CERT_PATH` | (none)      | Path to PEM certificate for TLS |
 
 ## Usage
 

@@ -73,8 +73,13 @@ def list_conditions(search: str = "") -> str:
         if query and query not in haystack:
             continue
         first_line = info.docstring.split("\n")[0] if info.docstring else ""
-        prefix = f"[{entry.category}] " if entry else ""
-        results.append(f"{prefix}{name}: {first_line}")
+        if entry:
+            # Both, not either: the title is what a search matches on and reads
+            # like a rule, while the docstring is what separates the arities of
+            # one test, which all share a title.
+            results.append(f"[{entry.category}] {name}: {entry.title} -- {first_line}")
+        else:
+            results.append(f"{name}: {first_line}")
 
     if not results:
         return f"No conditions match {search!r}."

@@ -13,7 +13,6 @@ import re
 import threading
 import urllib.request
 from dataclasses import dataclass, field
-from functools import lru_cache
 from typing import Any
 
 _URL = "https://www.dirageosystems.ch/prosuite/doc/ProSuiteQA_QuickReference_en.pdf"
@@ -124,9 +123,8 @@ def _fetch() -> bytes:
         return response.read()
 
 
-@lru_cache(maxsize=1)
 def load() -> dict[str, QuickRefEntry]:
-    """Fetched and parsed once per process.
+    """Fetch and parse, here and now.
 
     Fails soft: the Quick Reference enriches the catalog and does not gate it,
     so an air-gapped host or a moved URL costs the descriptions, not the tools.
@@ -137,17 +135,42 @@ def load() -> dict[str, QuickRefEntry]:
         return {}
 
 
-def warm() -> None:
-    """Start loading now, so the first condition lookup does not wait.
+_lock = threading.Lock()
+_entries: dict[str, QuickRefEntry] | None = None
+_started = False
 
-    Downloading and parsing the document takes a couple of seconds, and a
-    caller would otherwise pay all of it. Daemon, because a slow fetch must
-    not hold the process open.
+
+def _load_in_background() -> None:
+    global _entries
+    loaded = load()
+    with _lock:
+        _entries = loaded
+
+
+def warm() -> None:
+    """Begin loading, once per process. Returns immediately."""
+    global _started
+    with _lock:
+        if _started:
+            return
+        _started = True
+    threading.Thread(target=_load_in_background, daemon=True).start()
+
+
+def entries() -> dict[str, QuickRefEntry]:
+    """What has been loaded so far, without ever waiting for it.
+
+    A lookup must not pay for a download, not even the first one to arrive
+    while the fetch is still running: this is a catalog operation that is
+    otherwise local. Until the load lands, callers see no enrichment, which is
+    the same thing they see when the document cannot be reached at all.
     """
-    threading.Thread(target=load, daemon=True).start()
+    warm()
+    with _lock:
+        return _entries if _entries is not None else {}
 
 
 def for_condition(method_name: str) -> QuickRefEntry | None:
     """The entry for a catalog method, whose arity suffix is ours, not the
     Quick Reference's: qa_min_length_1 and qa_min_length_0 share an entry."""
-    return load().get(re.sub(r"_\d+$", "", method_name))
+    return entries().get(re.sub(r"_\d+$", "", method_name))

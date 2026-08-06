@@ -3,8 +3,12 @@ cover the line handling rather than the document."""
 
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 
+from prosuite_mcp import quickref
 from prosuite_mcp.quickref import (
     QuickRefEntry,
     _join,
@@ -100,6 +104,46 @@ def test_for_condition_ignores_the_arity_suffix(monkeypatch):
 
     assert for_condition("qa_min_length_0") is entry
     assert for_condition("qa_min_length_1") is entry
+
+
+def test_a_lookup_does_not_wait_for_the_download(monkeypatch):
+    """The window this closes is a real one: a client asking for a condition
+    while the startup fetch is still running would otherwise wait out the
+    network timeout for what is a local catalog operation."""
+    still_downloading = threading.Event()
+    monkeypatch.setattr(
+        "prosuite_mcp.quickref._fetch",
+        lambda: (still_downloading.wait(timeout=10), b"")[1],
+    )
+
+    started = time.monotonic()
+    assert for_condition("qa_min_length_1") is None
+    elapsed = time.monotonic() - started
+    still_downloading.set()
+
+    assert elapsed < 1, f"lookup blocked for {elapsed:.1f}s"
+
+
+def _settle() -> None:
+    """Wait out the background load the lookups started."""
+    for thread in threading.enumerate():
+        if thread is not threading.current_thread() and thread.daemon:
+            thread.join(timeout=5)
+
+
+def test_the_document_is_fetched_once_however_many_lookups(monkeypatch):
+    """Every condition in a listing calls for_condition, so a fetch per miss
+    would mean hundreds of them."""
+    calls = []
+    monkeypatch.setattr(
+        "prosuite_mcp.quickref._fetch", lambda: (calls.append(1), b"")[1]
+    )
+
+    for _ in range(5):
+        for_condition("qa_min_length_1")
+    _settle()
+
+    assert calls == [1]
 
 
 def test_an_unreachable_quick_reference_costs_only_the_descriptions(monkeypatch):

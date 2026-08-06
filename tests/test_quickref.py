@@ -8,7 +8,6 @@ import time
 
 import pytest
 
-from prosuite_mcp import quickref
 from prosuite_mcp.quickref import (
     QuickRefEntry,
     _join,
@@ -17,6 +16,7 @@ from prosuite_mcp.quickref import (
     for_condition,
     load,
 )
+from tests.conftest import await_quickref_loader
 
 
 @pytest.mark.parametrize(
@@ -124,13 +124,6 @@ def test_a_lookup_does_not_wait_for_the_download(monkeypatch):
     assert elapsed < 1, f"lookup blocked for {elapsed:.1f}s"
 
 
-def _settle() -> None:
-    """Wait out the background load the lookups started."""
-    for thread in threading.enumerate():
-        if thread is not threading.current_thread() and thread.daemon:
-            thread.join(timeout=5)
-
-
 def test_the_document_is_fetched_once_however_many_lookups(monkeypatch):
     """Every condition in a listing calls for_condition, so a fetch per miss
     would mean hundreds of them."""
@@ -141,7 +134,7 @@ def test_the_document_is_fetched_once_however_many_lookups(monkeypatch):
 
     for _ in range(5):
         for_condition("qa_min_length_1")
-    _settle()
+    await_quickref_loader()
 
     assert calls == [1]
 

@@ -138,6 +138,8 @@ def load() -> dict[str, QuickRefEntry]:
 _lock = threading.Lock()
 _entries: dict[str, QuickRefEntry] | None = None
 _started = False
+# Kept so a caller can tell a load in flight from one that has landed.
+_worker: threading.Thread | None = None
 
 
 def _load_in_background() -> None:
@@ -149,12 +151,13 @@ def _load_in_background() -> None:
 
 def warm() -> None:
     """Begin loading, once per process. Returns immediately."""
-    global _started
+    global _started, _worker
     with _lock:
         if _started:
             return
         _started = True
-    threading.Thread(target=_load_in_background, daemon=True).start()
+        _worker = threading.Thread(target=_load_in_background, daemon=True)
+    _worker.start()
 
 
 def entries() -> dict[str, QuickRefEntry]:

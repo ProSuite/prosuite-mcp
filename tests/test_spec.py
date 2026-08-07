@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from prosuite_mcp.spec import (
-    SpecCondition,
     _descriptor_to_method,
     _resolve_param_name,
     _to_snake,

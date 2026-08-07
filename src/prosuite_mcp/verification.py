@@ -28,7 +28,7 @@ from .schemas import ConditionRequest, DatasetRef
 
 def _run_dir_name(name: str) -> str:
     # Token as well as a timestamp: two runs can share a second.
-    ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+    ts = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
     safe = re.sub(r"[^\w-]", "_", name)
     return f"{ts}_{token_hex(4)}_{safe}"
 
@@ -162,11 +162,14 @@ def _run_verify(
         level = response.message_level
         if response.service_call_status == ServiceStatus.status_4 and response.message:
             outcome.failure_messages.append(response.message)
-        if response.message and level in _DIAGNOSTIC_LEVELS:
-            if len(outcome.service_messages) < _MESSAGE_CAP:
-                outcome.service_messages.append(
-                    {"level": level, "message": response.message}
-                )
+        if (
+            response.message
+            and level in _DIAGNOSTIC_LEVELS
+            and len(outcome.service_messages) < _MESSAGE_CAP
+        ):
+            outcome.service_messages.append(
+                {"level": level, "message": response.message}
+            )
         if on_progress and response.message and level not in _QUIET_LEVELS:
             on_progress(response.message)
         for issue in response.issues:
@@ -362,7 +365,7 @@ def run_xml_verification_impl(
 ) -> dict[str, Any]:
     try:
         xml_spec = XmlSpecification(spec_path, specification_name, replacements)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a bad spec file is a result, not a crash
         return {
             "status": "error",
             "engine_confirmed": False,

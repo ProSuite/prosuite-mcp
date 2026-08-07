@@ -131,7 +131,7 @@ def load() -> dict[str, QuickRefEntry]:
     """
     try:
         return parse(_fetch())
-    except Exception:
+    except Exception:  # noqa: BLE001 - fails soft, see docstring
         return {}
 
 

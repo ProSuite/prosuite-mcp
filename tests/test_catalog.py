@@ -1,7 +1,5 @@
 """Unit tests for the condition catalog built from Conditions introspection."""
 
-import pytest
-
 from prosuite_mcp.catalog import CATALOG, ConditionInfo, ParamInfo
 
 

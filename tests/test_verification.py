@@ -457,20 +457,20 @@ def _mock_verified_spec() -> VerifiedSpecification:
 
 
 def _run_adhoc(**overrides):
-    args = dict(
-        model_catalog_path="C:/test.gdb",
-        model_name="TestModel",
-        datasets=[DatasetRef(name="Roads")],
-        conditions=[
+    args = {
+        "model_catalog_path": "C:/test.gdb",
+        "model_name": "TestModel",
+        "datasets": [DatasetRef(name="Roads")],
+        "conditions": [
             ConditionRequest(
                 condition="qa3d_constant_z_0",
                 params={"feature_class": "Roads", "tolerance": 0.01},
             )
         ],
-        output_dir=None,
-        envelope=None,
-        run_dir_prefix="adhoc",
-    )
+        "output_dir": None,
+        "envelope": None,
+        "run_dir_prefix": "adhoc",
+    }
     args.update(overrides)
     return run_verification_impl(**args)
 
@@ -957,8 +957,10 @@ def test_run_xml_verification_impl_surfaces_the_service_failure_message(tmp_path
     why. This is the exact message the live XML test provoked."""
     outcome = StreamOutcome(
         failure_messages=[
-            "Server error: Error deserializing file: The element 'DataQuality' "
-            "has invalid child element 'TestDescriptors'"
+            (
+                "Server error: Error deserializing file: The element 'DataQuality' "
+                "has invalid child element 'TestDescriptors'"
+            )
         ]
     )
     with (

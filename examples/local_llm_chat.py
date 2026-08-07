@@ -87,8 +87,10 @@ async def _build_spec_context(session: ClientSession) -> str:
     cats = Counter(c["category"] for c in conditions)
 
     lines = [
-        f"Loaded spec: {total} conditions "
-        f"({hard} hard failures, {len(conditions) - hard} warnings).",
+        (
+            f"Loaded spec: {total} conditions "
+            f"({hard} hard failures, {len(conditions) - hard} warnings)."
+        ),
         "",
         "Categories:",
     ]
@@ -161,35 +163,37 @@ async def run(question: str | None = None) -> None:
     prosuite_env = {k: v for k in _PROSUITE_ENV_VARS if (v := os.environ.get(k))}
     server = StdioServerParameters(command="prosuite-mcp", args=[], env=prosuite_env)
 
-    async with stdio_client(server) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            tools = [_to_openai_tool(t) for t in (await session.list_tools()).tools]
+    async with (
+        stdio_client(server) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        tools = [_to_openai_tool(t) for t in (await session.list_tools()).tools]
 
-            system = _SYSTEM_PROMPT
-            spec_ctx = await _build_spec_context(session)
-            if spec_ctx:
-                system += f"\n\nSpec loaded at startup:\n{spec_ctx}"
-            else:
-                system += "\n\nNo spec file loaded (set PROSUITE_SPEC_PATH to enable search_spec)."
+        system = _SYSTEM_PROMPT
+        spec_ctx = await _build_spec_context(session)
+        if spec_ctx:
+            system += f"\n\nSpec loaded at startup:\n{spec_ctx}"
+        else:
+            system += "\n\nNo spec file loaded (set PROSUITE_SPEC_PATH to enable search_spec)."
 
-            messages: list[dict] = [{"role": "system", "content": system}]
+        messages: list[dict] = [{"role": "system", "content": system}]
 
-            if question:
-                await _turn(llm, session, tools, messages, question)
-                return
+        if question:
+            await _turn(llm, session, tools, messages, question)
+            return
 
-            print("prosuite-mcp local chat  |  Ctrl-C or 'quit' to exit\n")
-            while True:
-                try:
-                    q = input("You: ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    print()
-                    break
-                if not q or q.lower() in {"quit", "exit"}:
-                    break
-                await _turn(llm, session, tools, messages, q)
+        print("prosuite-mcp local chat  |  Ctrl-C or 'quit' to exit\n")
+        while True:
+            try:
+                q = input("You: ").strip()
+            except (EOFError, KeyboardInterrupt):
                 print()
+                break
+            if not q or q.lower() in {"quit", "exit"}:
+                break
+            await _turn(llm, session, tools, messages, q)
+            print()
 
 
 if __name__ == "__main__":

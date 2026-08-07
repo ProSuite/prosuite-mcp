@@ -197,7 +197,7 @@ def describe_spec() -> dict:
         return _error("No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first.")
     try:
         return {"status": "ok", **get_spec_metadata(path)}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a tool reports errors, it does not raise
         return _error(f"Failed to read spec: {exc}")
 
 
@@ -256,7 +256,7 @@ def load_spec(path: str) -> dict:
         return _error(f"File not found: {path}")
     try:
         loaded = _load_spec(path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a tool reports errors, it does not raise
         return _error(f"Failed to parse spec: {exc}")
     set_spec(path, loaded)
     return {"status": "ok", "conditions_loaded": len(loaded), "path": path}
@@ -323,7 +323,7 @@ def add_condition_to_spec(
             description,
             category,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Not just ValueError: malformed spec_xml surfaces as ET.ParseError,
         # which subclasses SyntaxError and would escape the documented contract.
         return _error(str(exc))

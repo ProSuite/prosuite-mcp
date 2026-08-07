@@ -66,6 +66,3 @@ exclude = ["**/.claude", "**/__pycache__"]
 testpaths = ["tests"]
 asyncio_mode = "strict"
 
-[tool.ruff.lint]
-select = ["I"]
-

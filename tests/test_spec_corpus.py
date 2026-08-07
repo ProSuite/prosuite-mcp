@@ -129,7 +129,7 @@ def corpus() -> CorpusStats:
     for path in stats.files:
         try:
             conditions = load_spec(str(path))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - the survey tallies failures, it does not abort
             stats.load_errors.append(f"{path.name}: {type(exc).__name__}: {exc}")
             continue
 
@@ -139,7 +139,7 @@ def corpus() -> CorpusStats:
                     stats.specs_missing_workspaces.append(
                         f"{path.name}: {spec['specification_name']}"
                     )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - as above
             stats.metadata_errors.append(f"{path.name}: {type(exc).__name__}: {exc}")
 
         for condition in conditions:
@@ -162,7 +162,7 @@ def corpus() -> CorpusStats:
             except ValueError as exc:
                 stats.failures[_classify(str(exc))] += 1
                 continue
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - as above
                 stats.unexpected.append(f"{path.name}: {type(exc).__name__}: {exc}")
                 continue
             stats.built += 1
@@ -176,7 +176,7 @@ def corpus() -> CorpusStats:
                     AdvancedParameters(specification, "", None)
                 ).SerializeToString()
                 stats.clean += 1
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - as above
                 stats.failures[f"serialize: {type(exc).__name__}"] += 1
                 stats.unexpected.append(
                     f"{path.name}: serializing {result['name']!r}: "

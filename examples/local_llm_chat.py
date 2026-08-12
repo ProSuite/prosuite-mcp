@@ -45,13 +45,14 @@ Which tool to call:
 - What the spec contains (specification names, workspace ids, datasets): describe_spec.
 - Finding conditions: search_spec with a keyword, or query="" for all of them.
 - Parameters of a single test: describe_condition.
-- Running checks: run_xml_verification, with the specification name and a workspace
-  path for every workspace id describe_spec reported. It runs the spec as written,
-  so prefer it whenever a spec is loaded.
-- run_verification builds conditions from scratch and cannot express per-condition
+- Running checks: start_xml_verification, with the specification name and a workspace
+  path for every workspace id describe_spec reported. It returns a run_id. Poll
+  get_verification_status and retrieve get_verification_result when finished.
+  It runs the spec as written, so prefer it whenever a spec is loaded.
+- start_verification builds conditions from scratch and cannot express per-condition
   dataset filters. Use it only when no spec is loaded.
-- A search_spec result marked "unsupported" has no condition_request: run_xml_verification
-  runs it, run_verification cannot.\
+- A search_spec result marked "unsupported" has no condition_request: start_xml_verification
+  runs it, start_verification cannot.\
 """
 
 
@@ -109,7 +110,7 @@ async def _turn(
     """Append user question to shared history, run tool loop, append final reply.
 
     Budgeted in calls, not rounds: one response may carry any number of them,
-    and each run_xml_verification is a real ProSuite verification. Refused calls
+    and each start_xml_verification starts a real ProSuite verification. Refused calls
     still get a tool result, or the next turn sends a history the API rejects.
     """
     messages.append({"role": "user", "content": question})

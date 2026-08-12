@@ -24,6 +24,13 @@ claude
 
 The `-- uv run prosuite-mcp` tells Claude Code to start the MCP server via `uv run` in the current project, so prosuite-mcp is resolved from the local `.venv`. Run `claude` from the same `mytest` directory each time.
 
+Long verifications should use `start_verification` or `start_xml_verification`.
+They return a `run_id` immediately, avoiding client tool-call timeouts. Ask
+Claude to poll `get_verification_status(run_id)` and retrieve the finished run
+with `get_verification_result(run_id)`. The background worker persists status
+and results under `PROSUITE_MCP_STATE_DIR`; it processes one run at a time by
+default.
+
 ### Copilot CLI
 
 Register the server from inside `mytest`, then start Copilot:

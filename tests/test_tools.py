@@ -12,6 +12,7 @@ import anyio.to_thread
 import pytest
 
 from prosuite_mcp.catalog import CATALOG
+from prosuite_mcp.progress import ProgressEvent
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.tools import (
     _progress_relay,
@@ -31,7 +32,6 @@ from prosuite_mcp.tools import (
     start_verification,
     start_xml_verification,
 )
-from prosuite_mcp.verification import ProgressEvent
 from prosuite_mcp.workspace import WorkspaceError
 
 _MINIMAL_XML = textwrap.dedent("""\
@@ -566,8 +566,8 @@ async def test_progress_relay_reaches_the_event_loop_from_a_worker_thread():
     relay = _progress_relay(ctx)
 
     def tool_body():
-        relay(ProgressEvent(message="Processing tile 1 of 2"))
-        relay(ProgressEvent(message="Processing tile 2 of 2"))
+        relay(ProgressEvent(current=1, total=2, message="Processing tile 1 of 2"))
+        relay(ProgressEvent(current=2, total=2, message="Processing tile 2 of 2"))
 
     await anyio.to_thread.run_sync(tool_body)
 

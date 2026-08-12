@@ -4,8 +4,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from prosuite_mcp.async_runs import AsyncVerificationManager, RunStore
+from prosuite_mcp.progress import ProgressEvent
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
-from prosuite_mcp.verification import ProgressEvent
 
 
 def _wait_for_terminal(manager: AsyncVerificationManager, run_id: str):
@@ -104,9 +104,9 @@ def test_progress_and_result_are_persisted(tmp_path):
         on_progress = args[-1]
         on_progress(
             ProgressEvent(
-                overall_current=4,
-                overall_total=10,
-                processing_step_message="Checking roads",
+                current=4,
+                total=10,
+                message="Checking roads",
             )
         )
         return {

@@ -12,10 +12,10 @@ from prosuite.verification import (
     VerifiedSpecification,
 )
 
+from prosuite_mcp.progress import ProgressEvent
 from prosuite_mcp.schemas import ConditionRequest, DatasetRef
 from prosuite_mcp.verification import (
     _MESSAGE_CAP,
-    ProgressEvent,
     StreamOutcome,
     _decode_issue,
     _failure_reason,
@@ -267,12 +267,11 @@ def test_run_verify_relays_messages_while_the_run_is_going():
 
     assert [event.message for event in relayed] == [
         "Processing tile 1 of 2",
-        "skip me",
         "Processing tile 2 of 2",
     ]
 
 
-def test_progress_event_preserves_sdk_counters_and_boxes():
+def test_progress_event_uses_sdk_counter_and_message():
     progress = SimpleNamespace(
         overall_progress_current_step=2,
         overall_progress_total_steps=4,
@@ -290,10 +289,8 @@ def test_progress_event_preserves_sdk_counters_and_boxes():
     event = ProgressEvent.from_response(_fake_response([], progress=progress))
 
     assert event is not None
-    assert event.overall_current == 2
-    assert event.overall_total == 4
-    assert event.detailed_current == 37
-    assert event.current_box == {"x_min": -2, "y_min": -1, "x_max": 3, "y_max": 4}
+    assert (event.current, event.total) == (2, 4)
+    assert event.message == "tile finished"
 
 
 def test_progress_event_infers_tile_counter_from_legacy_message():
@@ -315,36 +312,7 @@ def test_progress_event_infers_tile_counter_from_legacy_message():
     )
 
     assert event is not None
-    assert event.counter() == (516, 1368)
-
-
-def test_run_verify_records_progress_without_retaining_every_event():
-    responses = [
-        _fake_response(
-            [],
-            progress=SimpleNamespace(
-                overall_progress_current_step=i,
-                overall_progress_total_steps=100,
-                detailed_progress_current_step=i,
-                detailed_progress_total_steps=100,
-                progress_type=1,
-                progress_step=1,
-                processing_step_message="Checking",
-                message="",
-                message_level=MessageLevel.level_40000,
-                current_box=None,
-                total_box=None,
-            ),
-        )
-        for i in range(100)
-    ]
-    service = SimpleNamespace(verify=lambda *a, **k: iter(responses))
-
-    outcome, _ = _run_verify(service, spec=None, output_dir="", perimeter=None)
-
-    assert outcome.progress_events_seen == 100
-    assert outcome.last_progress is not None
-    assert outcome.last_progress.overall_current == 99
+    assert (event.current, event.total) == (516, 1368)
 
 
 def test_run_verify_records_the_terminal_status():
@@ -633,20 +601,13 @@ def test_run_verification_impl_exposes_sample_and_counts(tmp_path):
     assert result["sample_features"] == sample
 
 
-def test_run_verification_impl_returns_bounded_progress_and_diagnostics(tmp_path):
+def test_run_verification_impl_returns_structured_diagnostics(tmp_path):
     spec = _mock_verified_spec()
-    progress = ProgressEvent(
-        overall_current=4,
-        overall_total=4,
-        processing_step_message="Finalizing",
-    )
     outcome = StreamOutcome(
         service_messages=[
             {"level": MessageLevel.level_60000, "message": "workspace exists"},
             {"level": MessageLevel.level_70000, "message": "condition failed"},
         ],
-        last_progress=progress,
-        progress_events_seen=1_000,
     )
 
     with (
@@ -663,8 +624,6 @@ def test_run_verification_impl_returns_bounded_progress_and_diagnostics(tmp_path
     assert result["errors"] == [
         {"level": MessageLevel.level_70000, "message": "condition failed"}
     ]
-    assert result["last_progress"]["overall_current"] == 4
-    assert result["progress_events_seen"] == 1_000
 
 
 def test_run_verification_impl_keeps_the_sample_when_there_is_no_summary(tmp_path):

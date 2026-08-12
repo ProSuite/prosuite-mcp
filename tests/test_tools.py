@@ -5,7 +5,8 @@ in test_authoring.py / test_verification.py.
 """
 
 import textwrap
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import anyio.to_thread
 import pytest
@@ -18,13 +19,19 @@ from prosuite_mcp.tools import (
     describe_condition,
     describe_dataset,
     describe_spec,
+    get_verification_result,
+    get_verification_status,
     list_conditions,
     list_datasets,
+    list_verification_runs,
     load_spec,
     preview_condition_run,
     run_verification,
     run_xml_verification,
+    start_verification,
+    start_xml_verification,
 )
+from prosuite_mcp.verification import ProgressEvent
 from prosuite_mcp.workspace import WorkspaceError
 
 _MINIMAL_XML = textwrap.dedent("""\
@@ -381,6 +388,36 @@ def test_every_dict_tool_reports_failure_the_same_way():
 # ---------------------------------------------------------------------------
 
 
+def test_start_verification_submits_to_async_manager():
+    manager = SimpleNamespace(start_adhoc=Mock(return_value={"run_id": "run-1"}))
+    condition = ConditionRequest(condition="qa_min_length_0", params={})
+    datasets = [DatasetRef(name="Roads")]
+
+    with patch("prosuite_mcp.tools.get_run_manager", return_value=manager):
+        result = start_verification("C:/test.gdb", "model", datasets, [condition])
+
+    assert result == {"run_id": "run-1"}
+    manager.start_adhoc.assert_called_once_with(
+        "C:/test.gdb", "model", datasets, [condition], None, None
+    )
+
+
+def test_async_status_result_and_list_delegate_to_manager():
+    manager = SimpleNamespace(
+        status=Mock(return_value={"status": "running"}),
+        result=Mock(return_value={"status": "success"}),
+        list=Mock(return_value={"status": "ok", "runs": []}),
+    )
+    with patch("prosuite_mcp.tools.get_run_manager", return_value=manager):
+        assert get_verification_status("run-1")["status"] == "running"
+        assert get_verification_result("run-1")["status"] == "success"
+        assert list_verification_runs("failed", 5)["status"] == "ok"
+
+    manager.status.assert_called_once_with("run-1")
+    manager.result.assert_called_once_with("run-1")
+    manager.list.assert_called_once_with(status="failed", limit=5)
+
+
 def test_run_verification_delegates_to_verification_impl():
     cond_req = ConditionRequest(
         condition="qa3d_constant_z_0",
@@ -492,6 +529,22 @@ def test_run_xml_verification_delegates_to_verification_impl(monkeypatch):
     assert result == {"status": "success"}
 
 
+def test_start_xml_verification_captures_loaded_spec(monkeypatch):
+    from prosuite_mcp.schemas import WorkspaceReplacement
+
+    monkeypatch.setenv("PROSUITE_SPEC_PATH", "/tmp/x.qa.xml")
+    manager = SimpleNamespace(start_xml=Mock(return_value={"run_id": "run-1"}))
+    replacements = [WorkspaceReplacement(workspace_id="DB", workspace_path="C:/db.sde")]
+
+    with patch("prosuite_mcp.tools.get_run_manager", return_value=manager):
+        result = start_xml_verification("Spec", replacements)
+
+    assert result == {"run_id": "run-1"}
+    manager.start_xml.assert_called_once_with(
+        "/tmp/x.qa.xml", "Spec", [["DB", "C:/db.sde"]], None, None
+    )
+
+
 # ---------------------------------------------------------------------------
 # _progress_relay
 # ---------------------------------------------------------------------------
@@ -513,21 +566,21 @@ async def test_progress_relay_reaches_the_event_loop_from_a_worker_thread():
     relay = _progress_relay(ctx)
 
     def tool_body():
-        relay("Processing tile 1 of 2")
-        relay("Processing tile 2 of 2")
+        relay(ProgressEvent(message="Processing tile 1 of 2"))
+        relay(ProgressEvent(message="Processing tile 2 of 2"))
 
     await anyio.to_thread.run_sync(tool_body)
 
     assert ctx.calls == [
-        (1, None, "Processing tile 1 of 2"),
-        (2, None, "Processing tile 2 of 2"),
+        (1, None, "1/2 (50%): Processing tile 1 of 2"),
+        (2, None, "2/2 (100%): Processing tile 2 of 2"),
     ]
 
 
 def test_progress_relay_survives_no_event_loop():
     """Losing progress must never fail a verification."""
     relay = _progress_relay(_FakeContext())
-    relay("Processing tile 1 of 2")
+    relay(ProgressEvent(message="Processing tile 1 of 2"))
 
 
 def test_progress_relay_is_absent_without_a_context():

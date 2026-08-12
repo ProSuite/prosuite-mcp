@@ -14,6 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from . import verification
+from .progress import ProgressEvent
 from .schemas import ConditionRequest, DatasetRef
 
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed", "interrupted"})
@@ -123,10 +124,8 @@ class RunStore:
                 ("Connecting to ProSuite", now, now, run_id),
             )
 
-    def update_progress(self, run_id: str, event: verification.ProgressEvent) -> None:
-        message = (
-            event.processing_step_message or event.message or "Verification is running"
-        )
+    def update_progress(self, run_id: str, event: ProgressEvent) -> None:
+        message = event.message or "Verification is running"
         with self._connect() as connection:
             connection.execute(
                 """
@@ -276,7 +275,7 @@ class AsyncVerificationManager:
         self.store.mark_running(run_id)
         last_write = 0.0
 
-        def on_progress(event: verification.ProgressEvent) -> None:
+        def on_progress(event: ProgressEvent) -> None:
             nonlocal last_write
             now = monotonic()
             if now - last_write < _PROGRESS_WRITE_INTERVAL_SECONDS:
@@ -353,8 +352,8 @@ def _status_response(row: dict[str, Any]) -> dict[str, Any]:
     progress = json.loads(row["progress_json"]) if row["progress_json"] else None
     current = total = None
     if progress:
-        event = verification.ProgressEvent(**progress)
-        current, total = event.counter()
+        event = ProgressEvent(**progress)
+        current, total = event.current, event.total
 
     elapsed_seconds = None
     estimated_remaining_seconds = None

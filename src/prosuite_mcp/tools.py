@@ -11,6 +11,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from . import authoring, quickref, verification, workspace
 from .async_runs import get_run_manager
 from .catalog import CATALOG
+from .progress import ProgressEvent
 from .schemas import ConditionRequest, DatasetRef, WorkspaceReplacement
 from .spec import get_loaded_conditions, get_spec_metadata, get_spec_path, set_spec
 from .spec import load_spec as _load_spec
@@ -30,7 +31,7 @@ def _error(message: str) -> dict[str, Any]:
 
 def _progress_relay(
     ctx: Context | None,
-) -> Callable[[verification.ProgressEvent], None] | None:
+) -> Callable[[ProgressEvent], None] | None:
     """Best-effort progress for synchronous callers that opt into MCP progress.
 
     Async verification does not depend on this notification path: its worker
@@ -41,9 +42,9 @@ def _progress_relay(
 
     step = count(1)
 
-    def relay(event: verification.ProgressEvent) -> None:
-        current, total = event.counter()
-        message = event.processing_step_message or event.message
+    def relay(event: ProgressEvent) -> None:
+        current, total = event.current, event.total
+        message = event.message
         if current is not None and total is not None:
             prefix = f"{current}/{total} ({current * 100 // total}%)"
             message = f"{prefix}: {message}" if message else prefix

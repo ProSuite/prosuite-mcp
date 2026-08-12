@@ -9,6 +9,7 @@ import anyio.from_thread
 from mcp.server.mcpserver import Context, MCPServer
 
 from . import authoring, quickref, verification, workspace
+from .async_runs import get_run_manager
 from .catalog import CATALOG
 from .schemas import ConditionRequest, DatasetRef, WorkspaceReplacement
 from .spec import get_loaded_conditions, get_spec_metadata, get_spec_path, set_spec
@@ -27,20 +28,30 @@ def _error(message: str) -> dict[str, Any]:
     return {"status": "error", "error": message}
 
 
-def _progress_relay(ctx: Context | None) -> Callable[[str], None] | None:
-    """Relay the service's messages during a run, so the client does not time
-    the request out. Tools run in a worker thread, hence from_thread.
+def _progress_relay(
+    ctx: Context | None,
+) -> Callable[[verification.ProgressEvent], None] | None:
+    """Best-effort progress for synchronous callers that opt into MCP progress.
+
+    Async verification does not depend on this notification path: its worker
+    persists every latest progress snapshot for get_verification_status.
     """
     if ctx is None:
         return None
 
     step = count(1)
 
-    def relay(message: str) -> None:
+    def relay(event: verification.ProgressEvent) -> None:
+        current, total = event.counter()
+        message = event.processing_step_message or event.message
+        if current is not None and total is not None:
+            prefix = f"{current}/{total} ({current * 100 // total}%)"
+            message = f"{prefix}: {message}" if message else prefix
+        if not message:
+            return
         try:
             anyio.from_thread.run(ctx.report_progress, next(step), None, message)
         except RuntimeError:
-            # No portal. Progress is not worth failing a run over.
             pass
 
     return relay
@@ -332,22 +343,22 @@ def add_condition_to_spec(
 
 
 @mcp.tool()
-def run_verification(
+def start_verification(
     model_catalog_path: str,
     model_name: str,
     datasets: list[DatasetRef],
     conditions: list[ConditionRequest],
     output_dir: str | None = None,
     envelope: dict[str, float] | None = None,
-    ctx: Context | None = None,
 ) -> dict[str, Any]:
-    """
-    Run a ProSuite quality verification.
+    """Queue an ad-hoc ProSuite verification and return immediately.
 
-    Build an ad-hoc condition-list specification and run it against the
-    given workspace. The ProSuite service (prosuite-qa-microservice) must
-    be reachable at the host/port configured via PROSUITE_HOST /
-    PROSUITE_PORT environment variables (default: localhost:5151).
+    This is the preferred entry point for full or potentially long-running
+    checks. It returns a run_id instead of holding the MCP request open. Poll
+    get_verification_status(run_id), then call get_verification_result(run_id).
+    No automatic completion notification or future model turn is triggered:
+    show the user the returned run_id, status/result calls, and output path;
+    never promise to check back automatically.
 
     Args:
         model_catalog_path: Workspace path on the server, e.g.
@@ -371,6 +382,58 @@ def run_verification(
             service's machine.
         envelope: Optional spatial filter {x_min, y_min, x_max, y_max}.
             Omit for full-extent verification.
+    """
+    return get_run_manager().start_adhoc(
+        model_catalog_path,
+        model_name,
+        datasets,
+        conditions,
+        output_dir,
+        envelope,
+    )
+
+
+@mcp.tool()
+def get_verification_status(run_id: str) -> dict[str, Any]:
+    """Return persisted state and latest progress for an async verification.
+
+    While running, the response includes elapsed time, the latest ProSuite
+    message and, where meaningful, a percentage and rough remaining-time
+    estimate. It also reports where the final MCP result will be stored.
+    This is polling: the server does not wake the client when a run completes.
+    """
+    return get_run_manager().status(run_id)
+
+
+@mcp.tool()
+def get_verification_result(run_id: str) -> dict[str, Any]:
+    """Return an async verification result, or its current status if unfinished."""
+    return get_run_manager().result(run_id)
+
+
+@mcp.tool()
+def list_verification_runs(
+    status: str | None = None, limit: int = 20
+) -> dict[str, Any]:
+    """List recent persisted verification runs, optionally filtered by status."""
+    return get_run_manager().list(status=status, limit=limit)
+
+
+@mcp.tool()
+def run_verification(
+    model_catalog_path: str,
+    model_name: str,
+    datasets: list[DatasetRef],
+    conditions: list[ConditionRequest],
+    output_dir: str | None = None,
+    envelope: dict[str, float] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Run a ProSuite verification synchronously.
+
+    Prefer start_verification for full runs. This compatibility tool holds the
+    MCP call open until ProSuite finishes and is best reserved for deliberately
+    small envelopes or clients with a sufficiently long tool timeout.
 
     Returns a summary with status, total_errors, and per-condition
     breakdown, plus 'service_messages': what the service warned about during
@@ -432,6 +495,40 @@ def preview_condition_run(
         envelope,
         "preview",
         _progress_relay(ctx),
+    )
+
+
+@mcp.tool()
+def start_xml_verification(
+    specification_name: str,
+    data_source_replacements: list[WorkspaceReplacement],
+    output_dir: str | None = None,
+    envelope: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """Queue a verification of the loaded XML specification.
+
+    The currently loaded spec path is captured when the run is submitted, so
+    a later load_spec call cannot silently change an already queued run.
+    No automatic completion notification or future model turn is triggered:
+    show the user the returned run_id, status/result calls, and output path;
+    never promise to check back automatically.
+    """
+    path = get_spec_path()
+    if not path:
+        return {
+            "status": "error",
+            "error": "No spec loaded. Set PROSUITE_SPEC_PATH or call load_spec first.",
+        }
+    replacements = [
+        [replacement.workspace_id, replacement.workspace_path]
+        for replacement in data_source_replacements
+    ]
+    return get_run_manager().start_xml(
+        path,
+        specification_name,
+        replacements,
+        output_dir,
+        envelope,
     )
 
 

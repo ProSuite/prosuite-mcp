@@ -112,8 +112,106 @@ _MESSAGE_CAP = 50
 _DIAGNOSTIC_LEVELS = frozenset(
     {MessageLevel.level_110000, MessageLevel.level_70000, MessageLevel.level_60000}
 )
-# Progress chatter, and the duplicates prosuite downgrades.
-_QUIET_LEVELS = frozenset({MessageLevel.level_30000, MessageLevel.level_10000})
+_TILE_PROGRESS_RE = re.compile(
+    r"\bProcessing\s+tile\s+(\d+)\s+of\s+(\d+)\b", re.IGNORECASE
+)
+
+
+@dataclass(frozen=True)
+class ProgressEvent:
+    """MCP-neutral snapshot of one response from the verification stream.
+
+    The prosuite package owns its protobuf wrapper types. Keeping only scalar
+    values here makes the MCP boundary stable and deliberately prevents the
+    raw, potentially high-volume stream from becoming tool-result context.
+    """
+
+    overall_current: int | None = None
+    overall_total: int | None = None
+    detailed_current: int | None = None
+    detailed_total: int | None = None
+    progress_type: int | None = None
+    progress_step: int | None = None
+    processing_step_message: str = ""
+    message: str = ""
+    message_level: str | None = None
+    current_box: dict[str, float] | None = None
+    total_box: dict[str, float] | None = None
+
+    def counter(self) -> tuple[int | None, int | None]:
+        """Return the best domain counter carried by this event.
+
+        Older ProSuite services expose progress only in messages such as
+        ``Processing tile 516 of 1368`` while the protobuf counter fields stay
+        at their default zero values. Keep that compatibility parsing here at
+        the service boundary so MCP transport code does not need to understand
+        ProSuite message formats.
+        """
+        if self.overall_current is not None and self.overall_total is not None:
+            if self.overall_total > 0:
+                return self.overall_current, self.overall_total
+        if self.detailed_current is not None and self.detailed_total is not None:
+            if self.detailed_total > 0:
+                return self.detailed_current, self.detailed_total
+
+        for text in (self.processing_step_message, self.message):
+            match = _TILE_PROGRESS_RE.search(text)
+            if match is not None:
+                current, total = (int(value) for value in match.groups())
+                return (current, total) if total > 0 else (None, None)
+        return None, None
+
+    @classmethod
+    def from_response(cls, response: Any) -> "ProgressEvent | None":
+        """Normalize SDK progress, while remaining compatible with SDK < 1.8."""
+        progress = getattr(response, "progress", None)
+        response_message = getattr(response, "message", "")
+        response_level = getattr(response, "message_level", None)
+        if progress is None:
+            return (
+                cls(message=response_message, message_level=response_level)
+                if response_message
+                else None
+            )
+
+        def box_as_dict(box: Any) -> dict[str, float] | None:
+            if box is None:
+                return None
+            return {
+                "x_min": box.x_min,
+                "y_min": box.y_min,
+                "x_max": box.x_max,
+                "y_max": box.y_max,
+            }
+
+        return cls(
+            overall_current=getattr(progress, "overall_progress_current_step", None),
+            overall_total=getattr(progress, "overall_progress_total_steps", None),
+            detailed_current=getattr(progress, "detailed_progress_current_step", None),
+            detailed_total=getattr(progress, "detailed_progress_total_steps", None),
+            progress_type=getattr(progress, "progress_type", None),
+            progress_step=getattr(progress, "progress_step", None),
+            processing_step_message=getattr(progress, "processing_step_message", ""),
+            message=getattr(progress, "message", "") or response_message,
+            message_level=getattr(progress, "message_level", None) or response_level,
+            current_box=box_as_dict(getattr(progress, "current_box", None)),
+            total_box=box_as_dict(getattr(progress, "total_box", None)),
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "overall_current": self.overall_current,
+            "overall_total": self.overall_total,
+            "detailed_current": self.detailed_current,
+            "detailed_total": self.detailed_total,
+            "progress_type": self.progress_type,
+            "progress_step": self.progress_step,
+            "processing_step_message": self.processing_step_message,
+            "message": self.message,
+            "message_level": self.message_level,
+            "current_box": self.current_box,
+            "total_box": self.total_box,
+        }
 
 
 @dataclass
@@ -139,6 +237,9 @@ class StreamOutcome:
     # A rejection and a cancelled run both end without a summary. Only this
     # separates them.
     last_status: str | None = None
+    # Kept for diagnosis and final tool output; raw events are never retained.
+    last_progress: ProgressEvent | None = None
+    progress_events_seen: int = 0
 
 
 def _run_verify(
@@ -146,29 +247,34 @@ def _run_verify(
     spec: Specification | XmlSpecification,
     output_dir: str,
     perimeter,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
 ) -> tuple[StreamOutcome, VerifiedSpecification | None]:
     """Consume the verification stream once, aggregating into a StreamOutcome.
 
     Returns (outcome, final verified spec). Individual issues are tallied and
     dropped; only a bounded sample is retained.
 
-    on_progress sees each reported message as it arrives.
+    on_progress sees every normalized progress snapshot as it arrives. The
+    caller decides what is worth forwarding to a human or MCP client.
     """
     outcome = StreamOutcome()
     verified_spec = None
     for response in service.verify(spec, perimeter=perimeter, output_dir=output_dir):
         outcome.last_status = response.service_call_status
-        level = response.message_level
-        if response.service_call_status == ServiceStatus.status_4 and response.message:
-            outcome.failure_messages.append(response.message)
-        if response.message and level in _DIAGNOSTIC_LEVELS:
+        event = ProgressEvent.from_response(response)
+        if event is not None:
+            outcome.last_progress = event
+            outcome.progress_events_seen += 1
+            if on_progress:
+                on_progress(event)
+
+        message = event.message if event is not None else response.message
+        level = event.message_level if event is not None else response.message_level
+        if response.service_call_status == ServiceStatus.status_4 and message:
+            outcome.failure_messages.append(message)
+        if message and level in _DIAGNOSTIC_LEVELS:
             if len(outcome.service_messages) < _MESSAGE_CAP:
-                outcome.service_messages.append(
-                    {"level": level, "message": response.message}
-                )
-        if on_progress and response.message and level not in _QUIET_LEVELS:
-            on_progress(response.message)
+                outcome.service_messages.append({"level": level, "message": message})
         for issue in response.issues:
             outcome.total += 1
             if issue.allowable:
@@ -242,6 +348,20 @@ def _summarize(spec: VerifiedSpecification, outcome: StreamOutcome) -> dict[str,
         "issue_counts_by_table": outcome.counts_by_table,
         "unmatched_condition_errors": unmatched_errors,
         "service_messages": outcome.service_messages,
+        "warnings": [
+            message
+            for message in outcome.service_messages
+            if message["level"] == MessageLevel.level_60000
+        ],
+        "errors": [
+            message
+            for message in outcome.service_messages
+            if message["level"] in {MessageLevel.level_70000, MessageLevel.level_110000}
+        ],
+        "last_progress": (
+            outcome.last_progress.as_dict() if outcome.last_progress else None
+        ),
+        "progress_events_seen": outcome.progress_events_seen,
         "sample_features": outcome.sample,
         "conditions": [
             {
@@ -263,7 +383,7 @@ def _verify_and_summarize(
     run_name: str,
     output_dir: str | None,
     envelope: dict[str, float] | None,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
 ) -> dict[str, Any]:
     """Run a built specification and shape the result.
 
@@ -314,6 +434,21 @@ def _verify_and_summarize(
             # Lets a caller branch on the two without parsing the prose.
             "service_status": outcome.last_status,
             "service_messages": outcome.service_messages,
+            "warnings": [
+                message
+                for message in outcome.service_messages
+                if message["level"] == MessageLevel.level_60000
+            ],
+            "errors": [
+                message
+                for message in outcome.service_messages
+                if message["level"]
+                in {MessageLevel.level_70000, MessageLevel.level_110000}
+            ],
+            "last_progress": (
+                outcome.last_progress.as_dict() if outcome.last_progress else None
+            ),
+            "progress_events_seen": outcome.progress_events_seen,
             # A run that failed mid-stream often explains itself here, in the
             # service's own words, where _failure_reason can only guess.
             "sample_features": outcome.sample,
@@ -333,7 +468,7 @@ def run_verification_impl(
     output_dir: str | None,
     envelope: dict[str, float] | None,
     run_dir_prefix: str,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
 ) -> dict[str, Any]:
     try:
         model = Model(model_name, model_catalog_path)
@@ -358,7 +493,7 @@ def run_xml_verification_impl(
     replacements: list[list[str]],
     output_dir: str | None,
     envelope: dict[str, float] | None,
-    on_progress: Callable[[str], None] | None = None,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
 ) -> dict[str, Any]:
     try:
         xml_spec = XmlSpecification(spec_path, specification_name, replacements)

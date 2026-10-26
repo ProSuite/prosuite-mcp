@@ -42,7 +42,7 @@ Repository = "https://github.com/ProSuite/prosuite-mcp"
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "pytest-asyncio==1.4.0",
+    "pytest-asyncio==1.4.1",
     "ruff==0.17.2",
     "pyright==1.1.414",
     "mdformat==1.0.0",
